@@ -1,0 +1,11 @@
+node_modules
+dist
+logs
+*.log
+.env
+.env.local
+.vscode
+.idea
+.DS_Store
+coverage
+prisma/generated
