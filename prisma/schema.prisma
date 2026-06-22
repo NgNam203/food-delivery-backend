@@ -13,12 +13,57 @@ enum UserRole {
   ADMIN
 }
 
+enum RestaurantStatus {
+  OPEN
+  CLOSED
+}
+
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
   password  String
-  role       UserRole @default(CUSTOMER)
+  role      UserRole @default(CUSTOMER)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  restaurants Restaurant[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+}
+
+model Restaurant {
+  id          String           @id @default(uuid())
+  ownerId     String
+  name        String
+  address     String
+  description String?
+  status      RestaurantStatus @default(CLOSED)
+
+  owner     User       @relation(fields: [ownerId], references: [id])
+  menuItems MenuItem[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([ownerId])
+}
+
+model MenuItem {
+  id           String  @id @default(uuid())
+  restaurantId String
+  name         String
+  description  String?
+  price        Decimal @db.Decimal(10, 2)
+  stock        Int     @default(0)
+  imageUrl     String?
+  isAvailable  Boolean @default(true)
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([restaurantId])
 }
