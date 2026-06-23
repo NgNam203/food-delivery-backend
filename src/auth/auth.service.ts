@@ -5,12 +5,14 @@ import * as bcrypt from 'bcrypt';
 import { UnauthorizedException } from '@nestjs/common';
 import { LoginDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class AuthService {
   constructor(
     private userService: UserService,
     private jwtService: JwtService,
+    private configService: ConfigService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -45,14 +47,46 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const accessToken = await this.jwtService.signAsync({
+    const accessToken = await this.signAccessToken(user);
+    const refreshToken = await this.signRefreshToken(user);
+
+    const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
+
+    await this.userService.updateRefreshTokenHash(user.id, refreshTokenHash);
+
+    return {
+      accessToken,
+      refreshToken,
+    };
+  }
+
+  private async signAccessToken(user: {
+    id: string;
+    email: string;
+    role: string;
+  }): Promise<string> {
+    return this.jwtService.signAsync({
       sub: user.id,
       email: user.email,
       role: user.role,
     });
+  }
 
-    return {
-      accessToken,
-    };
+  private async signRefreshToken(user: {
+    id: string;
+    email: string;
+    role: string;
+  }): Promise<string> {
+    return this.jwtService.signAsync(
+      {
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+      },
+      {
+        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
+        expiresIn: this.configService.getOrThrow('JWT_REFRESH_EXPIRES_IN'),
+      },
+    );
   }
 }

@@ -24,4 +24,18 @@ export class UserService {
       },
     });
   }
+
+  async updateRefreshTokenHash(
+    userId: string,
+    refreshTokenHash: string | null,
+  ) {
+    return this.prisma.user.update({
+      where: {
+        id: userId,
+      },
+      data: {
+        refreshTokenHash,
+      },
+    });
+  }
 }
