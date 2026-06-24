@@ -1,12 +1,21 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
-import { Roles } from 'src/auth/decorators/roles.decorator';
-import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
-import { RolesGuard } from 'src/auth/guards/roles.guard';
-import type { JwtPayload } from 'src/auth/types/jwt-payload.type';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { MenuItemService } from './menu-item.service';
+import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
 
 @Controller()
 export class MenuItemController {
@@ -26,5 +35,16 @@ export class MenuItemController {
   @Get('/restaurants/:restaurantId/menu-items')
   findByRestaurant(@Param('restaurantId') restaurantId: string) {
     return this.menuItemService.findByRestaurant(restaurantId);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER)
+  @Patch('/menu-items/:id')
+  update(
+    @Param('id') menuItemId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: UpdateMenuItemDto,
+  ) {
+    return this.menuItemService.update(menuItemId, user.userId, dto);
   }
 }

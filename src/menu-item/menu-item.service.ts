@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
 
 @Injectable()
 export class MenuItemService {
@@ -50,6 +51,35 @@ export class MenuItemService {
       orderBy: {
         createdAt: 'asc',
       },
+    });
+  }
+
+  async update(menuItemId: string, ownerId: string, dto: UpdateMenuItemDto) {
+    const menuItem = await this.prisma.menuItem.findFirst({
+      where: {
+        id: menuItemId,
+        deletedAt: null,
+      },
+      include: {
+        restaurant: true,
+      },
+    });
+
+    if (!menuItem) {
+      throw new NotFoundException('Menu item not found');
+    }
+
+    if (menuItem.restaurant.ownerId !== ownerId) {
+      throw new ForbiddenException(
+        'You are not allowed to modify this menu item',
+      );
+    }
+
+    return this.prisma.menuItem.update({
+      where: {
+        id: menuItemId,
+      },
+      data: dto,
     });
   }
 }
