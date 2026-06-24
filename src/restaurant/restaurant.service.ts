@@ -16,4 +16,13 @@ export class RestaurantService {
       },
     });
   }
+
+  async findMyRestaurants(ownerId: string) {
+    return this.prisma.restaurant.findMany({
+      where: {
+        ownerId,
+        deletedAt: null,
+      },
+    });
+  }
 }

@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -17,5 +17,12 @@ export class RestaurantController {
   @Post()
   create(@CurrentUser() user: JwtPayload, @Body() dto: CreateRestaurantDto) {
     return this.restaurantService.create(user.userId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER)
+  @Get('me')
+  findMyRestaurants(@CurrentUser() user: JwtPayload) {
+    return this.restaurantService.findMyRestaurants(user.userId);
   }
 }
