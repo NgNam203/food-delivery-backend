@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -92,6 +93,43 @@ export class OrderService {
       include: {
         items: true,
         restaurant: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+  }
+
+  async findRestaurantOrders(restaurantId: string, ownerId: string) {
+    const restaurant = await this.prisma.restaurant.findFirst({
+      where: {
+        id: restaurantId,
+        deletedAt: null,
+      },
+    });
+
+    if (!restaurant) {
+      throw new NotFoundException('Restaurant not found');
+    }
+
+    if (restaurant.ownerId !== ownerId) {
+      throw new ForbiddenException(
+        'You are not allowed to access this restaurant',
+      );
+    }
+
+    return this.prisma.order.findMany({
+      where: {
+        restaurantId,
+      },
+      include: {
+        items: true,
+        customer: {
+          select: {
+            id: true,
+            email: true,
+          },
+        },
       },
       orderBy: {
         createdAt: 'desc',

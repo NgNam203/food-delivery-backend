@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
 import { Roles } from 'src/auth/decorators/roles.decorator';
@@ -24,5 +24,15 @@ export class OrderController {
   @Get('me')
   findMyOrders(@CurrentUser() user: JwtPayload) {
     return this.orderService.findMyOrders(user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER)
+  @Get('restaurant/:restaurantId')
+  findRestaurantOrders(
+    @Param('restaurantId') restaurantId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.orderService.findRestaurantOrders(restaurantId, user.userId);
   }
 }
