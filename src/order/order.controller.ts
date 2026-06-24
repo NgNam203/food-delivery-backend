@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
 import { Roles } from 'src/auth/decorators/roles.decorator';
@@ -8,7 +8,7 @@ import type { JwtPayload } from 'src/auth/types/jwt-payload.type';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderService } from './order.service';
 
-@Controller('order')
+@Controller('orders')
 export class OrderController {
   constructor(private orderService: OrderService) {}
 
@@ -17,5 +17,12 @@ export class OrderController {
   @Post()
   create(@CurrentUser() user: JwtPayload, @Body() dto: CreateOrderDto) {
     return this.orderService.create(user.userId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CUSTOMER)
+  @Get('me')
+  findMyOrders(@CurrentUser() user: JwtPayload) {
+    return this.orderService.findMyOrders(user.userId);
   }
 }

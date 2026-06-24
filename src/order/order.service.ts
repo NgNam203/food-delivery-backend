@@ -83,4 +83,19 @@ export class OrderService {
       return order;
     });
   }
+
+  async findMyOrders(customerId: string) {
+    return this.prisma.order.findMany({
+      where: {
+        customerId,
+      },
+      include: {
+        items: true,
+        restaurant: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+  }
 }
