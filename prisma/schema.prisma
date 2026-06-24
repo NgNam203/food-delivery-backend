@@ -18,6 +18,15 @@ enum RestaurantStatus {
   CLOSED
 }
 
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY
+  COMPLETED
+  CANCELLED
+}
+
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
@@ -27,6 +36,7 @@ model User {
   refreshTokenHash String?
   
   restaurants Restaurant[]
+  orders Order[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -43,6 +53,7 @@ model Restaurant {
 
   owner     User       @relation(fields: [ownerId], references: [id])
   menuItems MenuItem[]
+  orders Order[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -62,10 +73,53 @@ model MenuItem {
   isAvailable  Boolean @default(true)
 
   restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+  orderItems OrderItem[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
   @@index([restaurantId])
+}
+
+model Order {
+  id String @id @default(uuid())
+
+  customerId String
+  restaurantId String
+
+  totalAmount Decimal @db.Decimal(10,2)
+
+  status OrderStatus @default(PENDING)
+
+  customer User @relation(fields: [customerId], references: [id])
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+
+  items OrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([restaurantId])
+}
+
+model OrderItem {
+  id String @id @default(uuid())
+
+  orderId String
+  menuItemId String
+
+  quantity Int
+
+  menuItemNameSnapshot String
+
+  priceSnapshot Decimal @db.Decimal(10,2)
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id])
+
+  @@index([orderId])
+  @@index([menuItemId])
 }
