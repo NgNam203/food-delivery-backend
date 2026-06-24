@@ -1,6 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateRestaurantDto } from './dto/create-restaurant.dto';
+import { UpdateRestaurantDto } from './dto/update-restaurant.dto';
 
 @Injectable()
 export class RestaurantService {
@@ -23,6 +28,36 @@ export class RestaurantService {
         ownerId,
         deletedAt: null,
       },
+    });
+  }
+
+  async update(
+    restaurantId: string,
+    ownerId: string,
+    dto: UpdateRestaurantDto,
+  ) {
+    const restaurant = await this.prisma.restaurant.findFirst({
+      where: {
+        id: restaurantId,
+        deletedAt: null,
+      },
+    });
+
+    if (!restaurant) {
+      throw new NotFoundException('Restaurant not found');
+    }
+
+    if (restaurant.ownerId !== ownerId) {
+      throw new ForbiddenException(
+        'You are not allowed to update this restaurant',
+      );
+    }
+
+    return this.prisma.restaurant.update({
+      where: {
+        id: restaurantId,
+      },
+      data: dto,
     });
   }
 }
