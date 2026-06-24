@@ -40,4 +40,16 @@ export class MenuItemService {
       },
     });
   }
+
+  async findByRestaurant(restaurantId: string) {
+    return this.prisma.menuItem.findMany({
+      where: {
+        restaurantId,
+        deletedAt: null,
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
+  }
 }

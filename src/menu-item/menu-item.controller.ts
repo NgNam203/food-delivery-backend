@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
 import { Roles } from 'src/auth/decorators/roles.decorator';
@@ -21,5 +21,10 @@ export class MenuItemController {
     @Body() dto: CreateMenuItemDto,
   ) {
     return this.menuItemService.create(restaurantId, user.userId, dto);
+  }
+
+  @Get('/restaurants/:restaurantId/menu-items')
+  findByRestaurant(@Param('restaurantId') restaurantId: string) {
+    return this.menuItemService.findByRestaurant(restaurantId);
   }
 }
