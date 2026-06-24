@@ -3,4 +3,5 @@ export type OrderItemData = {
   quantity: number;
   priceSnapshot: number;
   menuItemNameSnapshot: string;
+  restaurantId: string;
 };

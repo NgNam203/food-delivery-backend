@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderItemData } from './types/order-item-data.type';
@@ -30,7 +34,16 @@ export class OrderService {
         quantity: item.quantity,
         priceSnapshot: Number(menuItem.price),
         menuItemNameSnapshot: menuItem.name,
+        restaurantId: menuItem.restaurantId,
       });
+    }
+
+    const restaurantIds = new Set(result.map((item) => item.restaurantId));
+
+    if (restaurantIds.size > 1) {
+      throw new BadRequestException(
+        'All menu items must belong to the same restaurant',
+      );
     }
 
     return result;
@@ -48,21 +61,11 @@ export class OrderService {
 
     const totalAmount = this.calculateTotalAmount(orderItems);
 
-    const firstMenuItem = await this.prisma.menuItem.findUnique({
-      where: {
-        id: orderItems[0].menuItemId,
-      },
-    });
-
-    if (!firstMenuItem) {
-      throw new NotFoundException('Menu item not found');
-    }
-
     return this.prisma.$transaction(async (tx) => {
       const order = await tx.order.create({
         data: {
           customerId,
-          restaurantId: firstMenuItem.restaurantId,
+          restaurantId: orderItems[0].restaurantId,
           totalAmount,
         },
       });
