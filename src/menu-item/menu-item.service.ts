@@ -82,4 +82,35 @@ export class MenuItemService {
       data: dto,
     });
   }
+
+  async remove(menuItemId: string, ownerId: string) {
+    const menuItem = await this.prisma.menuItem.findFirst({
+      where: {
+        id: menuItemId,
+        deletedAt: null,
+      },
+      include: {
+        restaurant: true,
+      },
+    });
+
+    if (!menuItem) {
+      throw new NotFoundException('Menu item not found');
+    }
+
+    if (menuItem.restaurant.ownerId !== ownerId) {
+      throw new ForbiddenException(
+        'You are not allowed to delete this menu item',
+      );
+    }
+
+    return this.prisma.menuItem.update({
+      where: {
+        id: menuItemId,
+      },
+      data: {
+        deletedAt: new Date(),
+      },
+    });
+  }
 }

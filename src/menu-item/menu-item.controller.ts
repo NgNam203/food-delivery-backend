@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -46,5 +47,12 @@ export class MenuItemController {
     @Body() dto: UpdateMenuItemDto,
   ) {
     return this.menuItemService.update(menuItemId, user.userId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER)
+  @Delete('/menu-items/:id')
+  remove(@Param('id') menuItemId: string, @CurrentUser() user: JwtPayload) {
+    return this.menuItemService.remove(menuItemId, user.userId);
   }
 }
