@@ -35,4 +35,49 @@ export class OrderService {
 
     return result;
   }
+
+  private calculateTotalAmount(items: OrderItemData[]): number {
+    return items.reduce(
+      (sum, item) => sum + item.priceSnapshot * item.quantity,
+      0,
+    );
+  }
+
+  async create(customerId: string, dto: CreateOrderDto) {
+    const orderItems = await this.buildOrderItems(dto);
+
+    const totalAmount = this.calculateTotalAmount(orderItems);
+
+    const firstMenuItem = await this.prisma.menuItem.findUnique({
+      where: {
+        id: orderItems[0].menuItemId,
+      },
+    });
+
+    if (!firstMenuItem) {
+      throw new NotFoundException('Menu item not found');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const order = await tx.order.create({
+        data: {
+          customerId,
+          restaurantId: firstMenuItem.restaurantId,
+          totalAmount,
+        },
+      });
+
+      await tx.orderItem.createMany({
+        data: orderItems.map((item) => ({
+          orderId: order.id,
+          menuItemId: item.menuItemId,
+          quantity: item.quantity,
+          priceSnapshot: item.priceSnapshot,
+          menuItemNameSnapshot: item.menuItemNameSnapshot,
+        })),
+      });
+
+      return order;
+    });
+  }
 }
