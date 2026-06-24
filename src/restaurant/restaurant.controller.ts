@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -44,5 +45,12 @@ export class RestaurantController {
     @Body() dto: UpdateRestaurantDto,
   ) {
     return this.restaurantService.update(restaurantId, user.userId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER)
+  @Delete(':id')
+  remove(@CurrentUser() user: JwtPayload, @Param('id') restaurantId: string) {
+    return this.restaurantService.remove(restaurantId, user.userId);
   }
 }

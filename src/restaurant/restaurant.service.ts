@@ -60,4 +60,32 @@ export class RestaurantService {
       data: dto,
     });
   }
+
+  async remove(restaurantId: string, ownerId: string) {
+    const restaurant = await this.prisma.restaurant.findFirst({
+      where: {
+        id: restaurantId,
+        deletedAt: null,
+      },
+    });
+
+    if (!restaurant) {
+      throw new NotFoundException('Restaurant not found');
+    }
+
+    if (restaurant.ownerId !== ownerId) {
+      throw new ForbiddenException(
+        'You are not allowed to delete this restaurant',
+      );
+    }
+
+    return this.prisma.restaurant.update({
+      where: {
+        id: restaurantId,
+      },
+      data: {
+        deletedAt: new Date(),
+      },
+    });
+  }
 }
