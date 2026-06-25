@@ -92,9 +92,12 @@ export class OrderService {
       });
 
       for (const item of orderItems) {
-        await tx.menuItem.update({
+        const updated = await tx.menuItem.updateMany({
           where: {
             id: item.menuItemId,
+            stock: {
+              gte: item.quantity,
+            },
           },
           data: {
             stock: {
@@ -102,6 +105,12 @@ export class OrderService {
             },
           },
         });
+
+        if (updated.count === 0) {
+          throw new BadRequestException(
+            `Insufficient stock for ${item.menuItemNameSnapshot}`,
+          );
+        }
       }
 
       return order;
