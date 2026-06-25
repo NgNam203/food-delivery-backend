@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderItemData } from './types/order-item-data.type';
+import { OrderStatus } from '@prisma/client';
 
 @Injectable()
 export class OrderService {
@@ -133,6 +134,58 @@ export class OrderService {
       },
       orderBy: {
         createdAt: 'desc',
+      },
+    });
+  }
+
+  private readonly allowedStatusTransitions: Record<
+    OrderStatus,
+    OrderStatus[]
+  > = {
+    PENDING: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
+    CONFIRMED: [OrderStatus.PREPARING],
+    PREPARING: [OrderStatus.DELIVERING],
+    DELIVERING: [OrderStatus.COMPLETED],
+    COMPLETED: [],
+    CANCELLED: [],
+  };
+
+  async updateStatus(
+    orderId: string,
+    ownerId: string,
+    nextStatus: OrderStatus,
+  ) {
+    const order = await this.prisma.order.findFirst({
+      where: {
+        id: orderId,
+      },
+      include: {
+        restaurant: true,
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    if (order.restaurant.ownerId !== ownerId) {
+      throw new ForbiddenException('You are not allowed to update this order');
+    }
+
+    const allowedNextStatuses = this.allowedStatusTransitions[order.status];
+
+    if (!allowedNextStatuses.includes(nextStatus)) {
+      throw new BadRequestException(
+        `Cannot change order status from ${order.status} to ${nextStatus}`,
+      );
+    }
+
+    return this.prisma.order.update({
+      where: {
+        id: orderId,
+      },
+      data: {
+        status: nextStatus,
       },
     });
   }
