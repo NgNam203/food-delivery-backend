@@ -17,7 +17,7 @@ import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderService } from './order.service';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
-import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
+import { OrderQueryDto } from './dto/order-query.dto';
 
 @Controller('orders')
 export class OrderController {
@@ -33,11 +33,8 @@ export class OrderController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.CUSTOMER)
   @Get('me')
-  findMyOrders(
-    @CurrentUser() user: JwtPayload,
-    @Query() pagination: PaginationQueryDto,
-  ) {
-    return this.orderService.findMyOrders(user.userId, pagination);
+  findMyOrders(@CurrentUser() user: JwtPayload, @Query() query: OrderQueryDto) {
+    return this.orderService.findMyOrders(user.userId, query);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -46,12 +43,12 @@ export class OrderController {
   findRestaurantOrders(
     @Param('restaurantId') restaurantId: string,
     @CurrentUser() user: JwtPayload,
-    @Query() pagination: PaginationQueryDto,
+    @Query() query: OrderQueryDto,
   ) {
     return this.orderService.findRestaurantOrders(
       restaurantId,
       user.userId,
-      pagination,
+      query,
     );
   }
 
