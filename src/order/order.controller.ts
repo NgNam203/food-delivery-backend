@@ -5,17 +5,19 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
-import { Roles } from 'src/auth/decorators/roles.decorator';
-import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
-import { RolesGuard } from 'src/auth/guards/roles.guard';
-import type { JwtPayload } from 'src/auth/types/jwt-payload.type';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderService } from './order.service';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
+import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 
 @Controller('orders')
 export class OrderController {
@@ -31,8 +33,11 @@ export class OrderController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.CUSTOMER)
   @Get('me')
-  findMyOrders(@CurrentUser() user: JwtPayload) {
-    return this.orderService.findMyOrders(user.userId);
+  findMyOrders(
+    @CurrentUser() user: JwtPayload,
+    @Query() pagination: PaginationQueryDto,
+  ) {
+    return this.orderService.findMyOrders(user.userId, pagination);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -41,8 +46,13 @@ export class OrderController {
   findRestaurantOrders(
     @Param('restaurantId') restaurantId: string,
     @CurrentUser() user: JwtPayload,
+    @Query() pagination: PaginationQueryDto,
   ) {
-    return this.orderService.findRestaurantOrders(restaurantId, user.userId);
+    return this.orderService.findRestaurantOrders(
+      restaurantId,
+      user.userId,
+      pagination,
+    );
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

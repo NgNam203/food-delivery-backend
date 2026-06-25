@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderItemData } from './types/order-item-data.type';
 import { OrderStatus, UserRole } from '@prisma/client';
+import { PaginationQueryDto } from 'src/common/dto/pagination-query.dto';
 
 @Injectable()
 export class OrderService {
@@ -117,7 +118,11 @@ export class OrderService {
     });
   }
 
-  async findMyOrders(customerId: string) {
+  async findMyOrders(customerId: string, pagination: PaginationQueryDto) {
+    const { page, limit } = pagination;
+
+    const skip = (page - 1) * limit;
+
     return this.prisma.order.findMany({
       where: {
         customerId,
@@ -129,10 +134,16 @@ export class OrderService {
       orderBy: {
         createdAt: 'desc',
       },
+      skip,
+      take: limit,
     });
   }
 
-  async findRestaurantOrders(restaurantId: string, ownerId: string) {
+  async findRestaurantOrders(
+    restaurantId: string,
+    ownerId: string,
+    pagination: PaginationQueryDto,
+  ) {
     const restaurant = await this.prisma.restaurant.findFirst({
       where: {
         id: restaurantId,
@@ -149,7 +160,9 @@ export class OrderService {
         'You are not allowed to access this restaurant',
       );
     }
+    const { page, limit } = pagination;
 
+    const skip = (page - 1) * limit;
     return this.prisma.order.findMany({
       where: {
         restaurantId,
@@ -166,6 +179,8 @@ export class OrderService {
       orderBy: {
         createdAt: 'desc',
       },
+      skip,
+      take: limit,
     });
   }
 
