@@ -20,7 +20,6 @@ export class OrderService {
         where: {
           id: item.menuItemId,
           deletedAt: null,
-          isAvailable: true,
         },
         include: {
           restaurant: true,
@@ -29,6 +28,16 @@ export class OrderService {
 
       if (!menuItem) {
         throw new NotFoundException('Menu item not found');
+      }
+
+      if (!menuItem.isAvailable) {
+        throw new BadRequestException(`${menuItem.name} is unavailable`);
+      }
+
+      if (menuItem.stock < item.quantity) {
+        throw new BadRequestException(
+          `Insufficient stock for ${menuItem.name}`,
+        );
       }
 
       result.push({
@@ -81,6 +90,19 @@ export class OrderService {
           menuItemNameSnapshot: item.menuItemNameSnapshot,
         })),
       });
+
+      for (const item of orderItems) {
+        await tx.menuItem.update({
+          where: {
+            id: item.menuItemId,
+          },
+          data: {
+            stock: {
+              decrement: item.quantity,
+            },
+          },
+        });
+      }
 
       return order;
     });
