@@ -7,7 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderItemData } from './types/order-item-data.type';
-import { OrderStatus } from '@prisma/client';
+import { OrderStatus, UserRole } from '@prisma/client';
 
 @Injectable()
 export class OrderService {
@@ -219,5 +219,37 @@ export class OrderService {
         status: nextStatus,
       },
     });
+  }
+
+  async findDetail(orderId: string, userId: string, role: UserRole) {
+    const order = await this.prisma.order.findUnique({
+      where: {
+        id: orderId,
+      },
+      include: {
+        restaurant: true,
+        customer: {
+          select: {
+            id: true,
+            email: true,
+          },
+        },
+        items: true,
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    if (role === UserRole.CUSTOMER && order.customerId !== userId) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    if (role === UserRole.OWNER && order.restaurant.ownerId !== userId) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    return order;
   }
 }

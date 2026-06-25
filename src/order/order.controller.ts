@@ -55,4 +55,11 @@ export class OrderController {
   ) {
     return this.orderService.updateStatus(orderId, user.userId, dto.status);
   }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CUSTOMER, UserRole.OWNER)
+  @Get(':id')
+  findDetail(@Param('id') orderId: string, @CurrentUser() user: JwtPayload) {
+    return this.orderService.findDetail(orderId, user.userId, user.role);
+  }
 }
