@@ -175,7 +175,6 @@ Có thể:
 
 ```text
 PENDING → CANCELLED
-CONFIRMED → CANCELLED
 ```
 
 Không cho phép:
