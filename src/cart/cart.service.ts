@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { PrismaService } from '../prisma/prisma.service';
+import { UpdateCartItemDto } from './dto/update-cart-item.dto';
 
 @Injectable()
 export class CartService {
@@ -94,5 +95,67 @@ export class CartService {
         },
       },
     });
+  }
+
+  async updateQuantity(
+    customerId: string,
+    cartItemId: string,
+    dto: UpdateCartItemDto,
+  ) {
+    const cart = await this.findOrCreateCart(customerId);
+    const cartItem = await this.prisma.cartItem.findFirst({
+      where: {
+        id: cartItemId,
+        cartId: cart.id,
+      },
+    });
+
+    if (!cartItem) {
+      throw new NotFoundException('Cart item not found');
+    }
+    return this.prisma.cartItem.update({
+      where: {
+        id: cartItem.id,
+      },
+      data: {
+        quantity: dto.quantity,
+      },
+    });
+  }
+
+  async removeItem(customerId: string, cartItemId: string) {
+    const cart = await this.findOrCreateCart(customerId);
+    const cartItem = await this.prisma.cartItem.findFirst({
+      where: {
+        id: cartItemId,
+        cartId: cart.id,
+      },
+    });
+
+    if (!cartItem) {
+      throw new NotFoundException('Cart item not found');
+    }
+
+    await this.prisma.cartItem.delete({
+      where: {
+        id: cartItem.id,
+      },
+    });
+
+    return {
+      message: 'Cart item removed successfully',
+    };
+  }
+
+  async clearCart(customerId: string) {
+    const cart = await this.findOrCreateCart(customerId);
+    await this.prisma.cartItem.deleteMany({
+      where: {
+        cartId: cart.id,
+      },
+    });
+    return {
+      message: 'Cart cleared successfully',
+    };
   }
 }
