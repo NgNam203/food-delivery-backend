@@ -7,7 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderItemData } from './types/order-item-data.type';
-import { OrderStatus, UserRole } from '@prisma/client';
+import { OrderStatus, Prisma, UserRole } from '@prisma/client';
 import { OrderQueryDto } from './dto/order-query.dto';
 
 @Injectable()
@@ -68,54 +68,62 @@ export class OrderService {
     );
   }
 
-  async create(customerId: string, dto: CreateOrderDto) {
-    const orderItems = await this.buildOrderItems(dto);
-
+  async createOrderWithTransaction(
+    tx: Prisma.TransactionClient,
+    customerId: string,
+    orderItems: OrderItemData[],
+  ) {
     const totalAmount = this.calculateTotalAmount(orderItems);
 
-    return this.prisma.$transaction(async (tx) => {
-      const order = await tx.order.create({
+    const order = await tx.order.create({
+      data: {
+        customerId,
+        restaurantId: orderItems[0].restaurantId,
+        totalAmount,
+      },
+    });
+
+    await tx.orderItem.createMany({
+      data: orderItems.map((item) => ({
+        orderId: order.id,
+        menuItemId: item.menuItemId,
+        quantity: item.quantity,
+        priceSnapshot: item.priceSnapshot,
+        menuItemNameSnapshot: item.menuItemNameSnapshot,
+      })),
+    });
+
+    for (const item of orderItems) {
+      const updated = await tx.menuItem.updateMany({
+        where: {
+          id: item.menuItemId,
+          stock: {
+            gte: item.quantity,
+          },
+        },
         data: {
-          customerId,
-          restaurantId: orderItems[0].restaurantId,
-          totalAmount,
+          stock: {
+            decrement: item.quantity,
+          },
         },
       });
 
-      await tx.orderItem.createMany({
-        data: orderItems.map((item) => ({
-          orderId: order.id,
-          menuItemId: item.menuItemId,
-          quantity: item.quantity,
-          priceSnapshot: item.priceSnapshot,
-          menuItemNameSnapshot: item.menuItemNameSnapshot,
-        })),
-      });
-
-      for (const item of orderItems) {
-        const updated = await tx.menuItem.updateMany({
-          where: {
-            id: item.menuItemId,
-            stock: {
-              gte: item.quantity,
-            },
-          },
-          data: {
-            stock: {
-              decrement: item.quantity,
-            },
-          },
-        });
-
-        if (updated.count === 0) {
-          throw new BadRequestException(
-            `Insufficient stock for ${item.menuItemNameSnapshot}`,
-          );
-        }
+      if (updated.count === 0) {
+        throw new BadRequestException(
+          `Insufficient stock for ${item.menuItemNameSnapshot}`,
+        );
       }
+    }
 
-      return order;
-    });
+    return order;
+  }
+
+  async create(customerId: string, dto: CreateOrderDto) {
+    const orderItems = await this.buildOrderItems(dto);
+
+    return this.prisma.$transaction((tx) =>
+      this.createOrderWithTransaction(tx, customerId, orderItems),
+    );
   }
 
   async findMyOrders(customerId: string, query: OrderQueryDto) {

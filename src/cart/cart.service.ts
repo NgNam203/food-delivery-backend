@@ -6,10 +6,16 @@ import {
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
+import { Prisma } from '@prisma/client';
+import { OrderService } from '../order/order.service';
+import { OrderItemData } from 'src/order/types/order-item-data.type';
 
 @Injectable()
 export class CartService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly orderService: OrderService,
+  ) {}
 
   private async findOrCreateCart(customerId: string) {
     let cart = await this.prisma.cart.findUnique({
@@ -157,5 +163,89 @@ export class CartService {
     return {
       message: 'Cart cleared successfully',
     };
+  }
+
+  private validateCartItems(cart: {
+    items: {
+      quantity: number;
+      menuItem: {
+        id: string;
+        name: string;
+        deletedAt: Date | null;
+        isAvailable: boolean;
+        stock: number;
+        restaurantId: string;
+        price: Prisma.Decimal;
+      };
+    }[];
+  }) {
+    for (const item of cart.items) {
+      if (item.menuItem.deletedAt) {
+        throw new BadRequestException(`${item.menuItem.name} has been deleted`);
+      }
+      if (!item.menuItem.isAvailable) {
+        throw new BadRequestException(`${item.menuItem.name} is unavailable`);
+      }
+      if (item.menuItem.stock < item.quantity) {
+        throw new BadRequestException(
+          `Insufficient stock for ${item.menuItem.name}`,
+        );
+      }
+    }
+  }
+
+  async checkout(customerId: string) {
+    const cart = await this.prisma.cart.findUnique({
+      where: {
+        customerId,
+      },
+      include: {
+        items: {
+          include: {
+            menuItem: true,
+          },
+        },
+      },
+    });
+
+    if (!cart || cart.items.length === 0) {
+      throw new BadRequestException('Cart is empty');
+    }
+
+    this.validateCartItems(cart);
+
+    const orderItems: OrderItemData[] = cart.items.map((item) => ({
+      menuItemId: item.menuItem.id,
+      quantity: item.quantity,
+      priceSnapshot: Number(item.menuItem.price),
+      menuItemNameSnapshot: item.menuItem.name,
+      restaurantId: item.menuItem.restaurantId,
+    }));
+
+    const restaurantIds = new Set(
+      cart.items.map((item) => item.menuItem.restaurantId),
+    );
+
+    if (restaurantIds.size > 1) {
+      throw new BadRequestException(
+        'All cart items must belong to the same restaurant',
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const order = await this.orderService.createOrderWithTransaction(
+        tx,
+        customerId,
+        orderItems,
+      );
+
+      await tx.cartItem.deleteMany({
+        where: {
+          cartId: cart.id,
+        },
+      });
+
+      return order;
+    });
   }
 }

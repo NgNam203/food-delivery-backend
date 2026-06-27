@@ -63,4 +63,11 @@ export class CartController {
   clearCart(@CurrentUser() user: JwtPayload) {
     return this.cartService.clearCart(user.userId);
   }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CUSTOMER)
+  @Post('checkout')
+  checkout(@CurrentUser() user: JwtPayload) {
+    return this.cartService.checkout(user.userId);
+  }
 }
