@@ -8,13 +8,16 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
 import { Prisma } from '@prisma/client';
 import { OrderService } from '../order/order.service';
-import { OrderItemData } from 'src/order/types/order-item-data.type';
+import { OrderItemData } from '../order/types/order-item-data.type';
+import { PricingService } from '../pricing/pricing.service';
+import { CheckoutCartDto } from './dto/checkout-cart.dto';
 
 @Injectable()
 export class CartService {
   constructor(
     private prisma: PrismaService,
     private readonly orderService: OrderService,
+    private readonly pricingService: PricingService,
   ) {}
 
   private async findOrCreateCart(customerId: string) {
@@ -194,7 +197,7 @@ export class CartService {
     }
   }
 
-  async checkout(customerId: string) {
+  async checkout(customerId: string, dto: CheckoutCartDto) {
     const cart = await this.prisma.cart.findUnique({
       where: {
         customerId,
@@ -222,6 +225,11 @@ export class CartService {
       restaurantId: item.menuItem.restaurantId,
     }));
 
+    const pricing = await this.pricingService.calculatePricing(
+      orderItems,
+      dto.couponCode,
+    );
+
     const restaurantIds = new Set(
       cart.items.map((item) => item.menuItem.restaurantId),
     );
@@ -237,7 +245,21 @@ export class CartService {
         tx,
         customerId,
         orderItems,
+        pricing,
       );
+
+      if (pricing.couponId) {
+        await tx.coupon.update({
+          where: {
+            id: pricing.couponId,
+          },
+          data: {
+            usedCount: {
+              increment: 1,
+            },
+          },
+        });
+      }
 
       await tx.cartItem.deleteMany({
         where: {

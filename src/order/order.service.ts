@@ -10,6 +10,7 @@ import { OrderItemData } from './types/order-item-data.type';
 import { OrderStatus, Prisma, UserRole } from '@prisma/client';
 import { OrderQueryDto } from './dto/order-query.dto';
 import { buildPagination } from '../common/utils/pagination.util';
+import { Pricing } from '../pricing/types/pricing.type';
 
 @Injectable()
 export class OrderService {
@@ -73,14 +74,19 @@ export class OrderService {
     tx: Prisma.TransactionClient,
     customerId: string,
     orderItems: OrderItemData[],
+    pricing: Pricing,
   ) {
-    const totalAmount = this.calculateTotalAmount(orderItems);
-
     const order = await tx.order.create({
       data: {
         customerId,
         restaurantId: orderItems[0].restaurantId,
-        totalAmount,
+
+        subtotal: pricing.subtotal,
+        discountAmount: pricing.discountAmount,
+        totalAmount: pricing.totalAmount,
+
+        couponId: pricing.couponId,
+        couponCode: pricing.couponCode,
       },
     });
 
@@ -122,8 +128,16 @@ export class OrderService {
   async create(customerId: string, dto: CreateOrderDto) {
     const orderItems = await this.buildOrderItems(dto);
 
+    const subtotal = this.calculateTotalAmount(orderItems);
+
+    const pricing: Pricing = {
+      subtotal,
+      discountAmount: 0,
+      totalAmount: subtotal,
+    };
+
     return this.prisma.$transaction((tx) =>
-      this.createOrderWithTransaction(tx, customerId, orderItems),
+      this.createOrderWithTransaction(tx, customerId, orderItems, pricing),
     );
   }
 

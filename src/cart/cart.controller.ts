@@ -17,6 +17,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
+import { CheckoutCartDto } from './dto/checkout-cart.dto';
 
 @Controller('cart')
 export class CartController {
@@ -67,7 +68,7 @@ export class CartController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.CUSTOMER)
   @Post('checkout')
-  checkout(@CurrentUser() user: JwtPayload) {
-    return this.cartService.checkout(user.userId);
+  checkout(@CurrentUser() user: JwtPayload, @Body() dto: CheckoutCartDto) {
+    return this.cartService.checkout(user.userId, dto);
   }
 }

@@ -11,6 +11,7 @@ import { OrderModule } from './order/order.module';
 import { CartModule } from './cart/cart.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { CouponModule } from './coupon/coupon.module';
+import { PricingModule } from './pricing/pricing.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { CouponModule } from './coupon/coupon.module';
     CartModule,
     DashboardModule,
     CouponModule,
+    PricingModule,
   ],
   controllers: [AppController],
   providers: [AppService],
