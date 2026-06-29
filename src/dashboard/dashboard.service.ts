@@ -28,135 +28,114 @@ export class DashboardService {
 
     const restaurantIds = restaurants.map((restaurant) => restaurant.id);
 
-    const totalOrders = await this.prisma.order.count({
-      where: {
-        restaurantId: {
-          in: restaurantIds,
+    const [
+      totalOrders,
+      pendingOrders,
+      completedOrders,
+      cancelledOrders,
+      totalRevenue,
+      todayRevenue,
+      monthRevenue,
+      topSellingItems,
+    ] = await Promise.all([
+      this.prisma.order.count({
+        where: {
+          restaurantId: {
+            in: restaurantIds,
+          },
         },
-      },
-    });
+      }),
 
-    const pendingOrders = await this.prisma.order.count({
-      where: {
-        restaurantId: {
-          in: restaurantIds,
+      this.prisma.order.count({
+        where: {
+          restaurantId: {
+            in: restaurantIds,
+          },
+          status: OrderStatus.PENDING,
         },
-        status: OrderStatus.PENDING,
-      },
-    });
+      }),
 
-    const completedOrders = await this.prisma.order.count({
-      where: {
-        restaurantId: {
-          in: restaurantIds,
-        },
-        status: OrderStatus.COMPLETED,
-      },
-    });
-
-    const cancelledOrders = await this.prisma.order.count({
-      where: {
-        restaurantId: {
-          in: restaurantIds,
-        },
-        status: OrderStatus.CANCELLED,
-      },
-    });
-
-    const revenue = await this.prisma.order.aggregate({
-      where: {
-        restaurantId: {
-          in: restaurantIds,
-        },
-        status: OrderStatus.COMPLETED,
-      },
-      _sum: {
-        totalAmount: true,
-      },
-    });
-
-    const totalRevenue = Number(revenue._sum.totalAmount ?? 0);
-
-    const todayRevenue = await this.prisma.order.aggregate({
-      where: {
-        restaurantId: {
-          in: restaurantIds,
-        },
-        status: OrderStatus.COMPLETED,
-        createdAt: {
-          gte: startOfToday,
-        },
-      },
-      _sum: {
-        totalAmount: true,
-      },
-    });
-
-    const revenueToday = Number(todayRevenue._sum.totalAmount ?? 0);
-
-    const monthRevenue = await this.prisma.order.aggregate({
-      where: {
-        restaurantId: {
-          in: restaurantIds,
-        },
-        status: OrderStatus.COMPLETED,
-        createdAt: {
-          gte: startOfMonth,
-        },
-      },
-      _sum: {
-        totalAmount: true,
-      },
-    });
-
-    const revenueThisMonth = Number(monthRevenue._sum.totalAmount ?? 0);
-
-    const topSellingItems = await this.prisma.orderItem.groupBy({
-      by: ['menuItemId'],
-      where: {
-        order: {
+      this.prisma.order.count({
+        where: {
           restaurantId: {
             in: restaurantIds,
           },
           status: OrderStatus.COMPLETED,
         },
-      },
-      _sum: {
-        quantity: true,
-      },
-      orderBy: {
+      }),
+
+      this.prisma.order.count({
+        where: {
+          restaurantId: {
+            in: restaurantIds,
+          },
+          status: OrderStatus.CANCELLED,
+        },
+      }),
+
+      this.prisma.order.aggregate({
+        where: {
+          restaurantId: {
+            in: restaurantIds,
+          },
+          status: OrderStatus.COMPLETED,
+        },
         _sum: {
-          quantity: 'desc',
+          totalAmount: true,
         },
-      },
-      take: 5,
-    });
+      }),
 
-    const menuItemIds = topSellingItems.map((item) => item.menuItemId);
-
-    const menuItems = await this.prisma.menuItem.findMany({
-      where: {
-        id: {
-          in: menuItemIds,
+      this.prisma.order.aggregate({
+        where: {
+          restaurantId: {
+            in: restaurantIds,
+          },
+          status: OrderStatus.COMPLETED,
+          createdAt: {
+            gte: startOfToday,
+          },
         },
-      },
-      select: {
-        id: true,
-        name: true,
-        price: true,
-      },
-    });
+        _sum: {
+          totalAmount: true,
+        },
+      }),
 
-    const topSellingMenuItems = topSellingItems.map((item) => {
-      const menuItem = menuItems.find((menu) => menu.id === item.menuItemId);
+      this.prisma.order.aggregate({
+        where: {
+          restaurantId: {
+            in: restaurantIds,
+          },
+          status: OrderStatus.COMPLETED,
+          createdAt: {
+            gte: startOfMonth,
+          },
+        },
+        _sum: {
+          totalAmount: true,
+        },
+      }),
 
-      return {
-        id: menuItem?.id,
-        name: menuItem?.name,
-        price: Number(menuItem?.price),
-        soldQuantity: item._sum.quantity ?? 0,
-      };
-    });
+      this.prisma.orderItem.groupBy({
+        by: ['menuItemId'],
+        where: {
+          order: {
+            restaurantId: {
+              in: restaurantIds,
+            },
+            status: OrderStatus.COMPLETED,
+          },
+        },
+        _sum: {
+          quantity: true,
+        },
+        orderBy: {
+          _sum: {
+            quantity: 'desc',
+          },
+        },
+        take: 5,
+      }),
+    ]);
 
     return {
       totalOrders,
@@ -164,9 +143,9 @@ export class DashboardService {
       pendingOrders,
       completedOrders,
       cancelledOrders,
-      revenueToday,
-      revenueThisMonth,
-      topSellingMenuItems,
+      todayRevenue,
+      monthRevenue,
+      topSellingItems,
     };
   }
 }

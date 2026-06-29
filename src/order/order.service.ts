@@ -9,6 +9,7 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderItemData } from './types/order-item-data.type';
 import { OrderStatus, Prisma, UserRole } from '@prisma/client';
 import { OrderQueryDto } from './dto/order-query.dto';
+import { buildPagination } from '../common/utils/pagination.util';
 
 @Injectable()
 export class OrderService {
@@ -129,7 +130,7 @@ export class OrderService {
   async findMyOrders(customerId: string, query: OrderQueryDto) {
     const { page, limit, status } = query;
 
-    const skip = (page - 1) * limit;
+    const { skip, take } = buildPagination(page, limit);
 
     return this.prisma.order.findMany({
       where: {
@@ -144,7 +145,7 @@ export class OrderService {
         createdAt: 'desc',
       },
       skip,
-      take: limit,
+      take,
     });
   }
 
@@ -171,7 +172,7 @@ export class OrderService {
     }
     const { page, limit, status } = query;
 
-    const skip = (page - 1) * limit;
+    const { skip, take } = buildPagination(page, limit);
     return this.prisma.order.findMany({
       where: {
         restaurantId,
@@ -190,7 +191,7 @@ export class OrderService {
         createdAt: 'desc',
       },
       skip,
-      take: limit,
+      take,
     });
   }
 
