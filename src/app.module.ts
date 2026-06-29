@@ -9,6 +9,7 @@ import { RestaurantModule } from './restaurant/restaurant.module';
 import { MenuItemModule } from './menu-item/menu-item.module';
 import { OrderModule } from './order/order.module';
 import { CartModule } from './cart/cart.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { CartModule } from './cart/cart.module';
     MenuItemModule,
     OrderModule,
     CartModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],
