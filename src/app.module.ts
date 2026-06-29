@@ -10,6 +10,7 @@ import { MenuItemModule } from './menu-item/menu-item.module';
 import { OrderModule } from './order/order.module';
 import { CartModule } from './cart/cart.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { CouponModule } from './coupon/coupon.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     OrderModule,
     CartModule,
     DashboardModule,
+    CouponModule,
   ],
   controllers: [AppController],
   providers: [AppService],
