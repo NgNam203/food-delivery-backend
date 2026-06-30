@@ -200,6 +200,8 @@ export class OrderService {
             email: true,
           },
         },
+
+        payment: true,
       },
       orderBy: {
         createdAt: 'desc',
@@ -275,6 +277,8 @@ export class OrderService {
           },
         },
         items: true,
+
+        payment: true,
       },
     });
 

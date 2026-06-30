@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { OrderStatus } from '@prisma/client';
+import { OrderStatus, PaymentMethod, PaymentStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -30,12 +30,15 @@ export class DashboardService {
 
     const [
       totalOrders,
+      totalRevenue,
       pendingOrders,
       completedOrders,
       cancelledOrders,
-      totalRevenue,
-      todayRevenue,
-      monthRevenue,
+      paidOrders,
+      pendingPayments,
+      failedPayments,
+      revenueToday,
+      revenueThisMonth,
       topSellingItems,
     ] = await Promise.all([
       this.prisma.order.count({
@@ -43,6 +46,18 @@ export class DashboardService {
           restaurantId: {
             in: restaurantIds,
           },
+        },
+      }),
+
+      this.prisma.order.aggregate({
+        where: {
+          restaurantId: {
+            in: restaurantIds,
+          },
+          status: OrderStatus.COMPLETED,
+        },
+        _sum: {
+          totalAmount: true,
         },
       }),
 
@@ -73,15 +88,36 @@ export class DashboardService {
         },
       }),
 
-      this.prisma.order.aggregate({
+      this.prisma.payment.count({
         where: {
-          restaurantId: {
-            in: restaurantIds,
+          order: {
+            restaurantId: {
+              in: restaurantIds,
+            },
           },
-          status: OrderStatus.COMPLETED,
+          status: PaymentStatus.PAID,
         },
-        _sum: {
-          totalAmount: true,
+      }),
+
+      this.prisma.payment.count({
+        where: {
+          order: {
+            restaurantId: {
+              in: restaurantIds,
+            },
+          },
+          status: PaymentStatus.PENDING,
+        },
+      }),
+
+      this.prisma.payment.count({
+        where: {
+          order: {
+            restaurantId: {
+              in: restaurantIds,
+            },
+          },
+          status: PaymentStatus.FAILED,
         },
       }),
 
@@ -137,15 +173,47 @@ export class DashboardService {
       }),
     ]);
 
+    const paymentMethodStats = await this.prisma.payment.groupBy({
+      by: ['method'],
+      where: {
+        order: {
+          restaurantId: {
+            in: restaurantIds,
+          },
+        },
+        status: PaymentStatus.PAID,
+      },
+      _count: {
+        id: true,
+      },
+      _sum: {
+        amount: true,
+      },
+    });
+
+    const paymentMethods = Object.values(PaymentMethod).map((method) => {
+      const stat = paymentMethodStats.find((item) => item.method === method);
+
+      return {
+        method,
+        count: stat?._count.id ?? 0,
+        revenue: Number(stat?._sum.amount ?? 0),
+      };
+    });
+
     return {
       totalOrders,
       totalRevenue,
       pendingOrders,
       completedOrders,
       cancelledOrders,
-      todayRevenue,
-      monthRevenue,
+      paidOrders,
+      pendingPayments,
+      failedPayments,
+      revenueToday,
+      revenueThisMonth,
       topSellingItems,
+      paymentMethods,
     };
   }
 }

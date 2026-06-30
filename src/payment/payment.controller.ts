@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   Param,
   Patch,
   Post,
@@ -16,7 +17,7 @@ import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { PaymentService } from './payment.service';
 import { ConfirmPaymentDto } from './dto/confirm-payment.dto';
 
-@Controller('payment')
+@Controller('payments')
 export class PaymentController {
   constructor(private readonly paymentService: PaymentService) {}
 
@@ -40,5 +41,12 @@ export class PaymentController {
     @Body() dto: ConfirmPaymentDto,
   ) {
     return this.paymentService.confirm(paymentId, user.userId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CUSTOMER)
+  @Get('me')
+  findMyPayments(@CurrentUser() user: JwtPayload) {
+    return this.paymentService.findMyPayments(user.userId);
   }
 }

@@ -90,4 +90,27 @@ export class PaymentService {
       },
     });
   }
+
+  async findMyPayments(customerId: string) {
+    return this.prisma.payment.findMany({
+      where: {
+        order: {
+          customerId,
+        },
+      },
+      include: {
+        order: {
+          select: {
+            id: true,
+            status: true,
+            totalAmount: true,
+            createdAt: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+  }
 }
