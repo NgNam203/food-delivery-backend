@@ -12,6 +12,7 @@ import { CartModule } from './cart/cart.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { CouponModule } from './coupon/coupon.module';
 import { PricingModule } from './pricing/pricing.module';
+import { PaymentModule } from './payment/payment.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { PricingModule } from './pricing/pricing.module';
     DashboardModule,
     CouponModule,
     PricingModule,
+    PaymentModule,
   ],
   controllers: [AppController],
   providers: [AppService],
