@@ -16,10 +16,14 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { PaymentService } from './payment.service';
 import { ConfirmPaymentDto } from './dto/confirm-payment.dto';
+import { PaymentQueueService } from '../queue/payment-queue/payment-queue.service';
 
 @Controller('payments')
 export class PaymentController {
-  constructor(private readonly paymentService: PaymentService) {}
+  constructor(
+    private readonly paymentService: PaymentService,
+    private readonly paymentQueueService: PaymentQueueService,
+  ) {}
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.CUSTOMER)
@@ -48,5 +52,14 @@ export class PaymentController {
   @Get('me')
   findMyPayments(@CurrentUser() user: JwtPayload) {
     return this.paymentService.findMyPayments(user.userId);
+  }
+
+  @Post('test-job')
+  async testJob() {
+    await this.paymentQueueService.schedulePaymentTimeout('test-payment');
+
+    return {
+      message: 'Job queued',
+    };
   }
 }

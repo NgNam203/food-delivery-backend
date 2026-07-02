@@ -14,6 +14,7 @@ import {
 } from './dto/confirm-payment.dto';
 import { DashboardCacheService } from '../cache/dashboard-cache/dashboard-cache.service';
 import { randomUUID } from 'crypto';
+import { PaymentQueueService } from '../queue/payment-queue/payment-queue.service';
 
 @Injectable()
 export class PaymentService {
@@ -21,6 +22,7 @@ export class PaymentService {
     private readonly prisma: PrismaService,
     private readonly orderService: OrderService,
     private readonly dashboardCacheService: DashboardCacheService,
+    private readonly paymentQueueService: PaymentQueueService,
   ) {}
 
   async create(orderId: string, customerId: string, dto: CreatePaymentDto) {
@@ -49,13 +51,17 @@ export class PaymentService {
       throw new BadRequestException('Payment already exists');
     }
 
-    return this.prisma.payment.create({
+    const payment = await this.prisma.payment.create({
       data: {
         orderId: order.id,
         method: dto.method,
         amount: order.totalAmount,
       },
     });
+
+    await this.paymentQueueService.schedulePaymentTimeout(payment.id);
+
+    return payment;
   }
 
   async confirm(paymentId: string, customerId: string, dto: ConfirmPaymentDto) {
@@ -121,5 +127,52 @@ export class PaymentService {
         createdAt: 'desc',
       },
     });
+  }
+
+  async handlePaymentTimeout(paymentId: string): Promise<void> {
+    const payment = await this.prisma.payment.findUnique({
+      where: {
+        id: paymentId,
+      },
+      include: {
+        order: true,
+      },
+    });
+
+    if (!payment) {
+      return;
+    }
+
+    if (payment.status !== PaymentStatus.PENDING) {
+      return;
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.payment.update({
+        where: {
+          id: payment.id,
+        },
+        data: {
+          status: PaymentStatus.FAILED,
+          transactionId: `TIMEOUT_${randomUUID()}`,
+          paidAt: null,
+        },
+      });
+
+      if (payment.order.status === OrderStatus.PENDING) {
+        await tx.order.update({
+          where: {
+            id: payment.order.id,
+          },
+          data: {
+            status: OrderStatus.CANCELLED,
+          },
+        });
+      }
+    });
+
+    await this.dashboardCacheService.invalidateByRestaurantId(
+      payment.order.restaurantId,
+    );
   }
 }

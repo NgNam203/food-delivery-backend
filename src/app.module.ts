@@ -15,6 +15,7 @@ import { PricingModule } from './pricing/pricing.module';
 import { PaymentModule } from './payment/payment.module';
 import { RedisModule } from './redis/redis.module';
 import { CacheModule } from './cache/cache.module';
+import { QueueModule } from './queue/queue.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { CacheModule } from './cache/cache.module';
     PaymentModule,
     RedisModule,
     CacheModule,
+    QueueModule,
   ],
   controllers: [AppController],
   providers: [AppService],
