@@ -1,11 +1,22 @@
 import { Injectable } from '@nestjs/common';
 import { OrderStatus, PaymentMethod, PaymentStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { DashboardCacheService } from '../cache/dashboard-cache/dashboard-cache.service';
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly dashboardCacheService: DashboardCacheService,
+  ) {}
   async getOwnerDashboard(ownerId: string) {
+    const cachedDashboard = await this.dashboardCacheService.get(ownerId);
+
+    if (cachedDashboard) {
+      console.log('Dashboard Cache HIT');
+      return cachedDashboard;
+    }
+
     const now = new Date();
 
     const startOfToday = new Date(
@@ -15,7 +26,7 @@ export class DashboardService {
     );
 
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
+    console.log('Dashboard Cache MISS');
     const restaurants = await this.prisma.restaurant.findMany({
       where: {
         ownerId,
@@ -39,7 +50,7 @@ export class DashboardService {
       failedPayments,
       revenueToday,
       revenueThisMonth,
-      topSellingItems,
+      topSellingMenuItems,
     ] = await Promise.all([
       this.prisma.order.count({
         where: {
@@ -201,7 +212,7 @@ export class DashboardService {
       };
     });
 
-    return {
+    const dashboard = {
       totalOrders,
       totalRevenue,
       pendingOrders,
@@ -212,8 +223,12 @@ export class DashboardService {
       failedPayments,
       revenueToday,
       revenueThisMonth,
-      topSellingItems,
+      topSellingMenuItems,
       paymentMethods,
     };
+
+    await this.dashboardCacheService.set(ownerId, dashboard);
+
+    return dashboard;
   }
 }

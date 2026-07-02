@@ -13,6 +13,8 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { CouponModule } from './coupon/coupon.module';
 import { PricingModule } from './pricing/pricing.module';
 import { PaymentModule } from './payment/payment.module';
+import { RedisModule } from './redis/redis.module';
+import { CacheModule } from './cache/cache.module';
 
 @Module({
   imports: [
@@ -30,6 +32,8 @@ import { PaymentModule } from './payment/payment.module';
     CouponModule,
     PricingModule,
     PaymentModule,
+    RedisModule,
+    CacheModule,
   ],
   controllers: [AppController],
   providers: [AppService],

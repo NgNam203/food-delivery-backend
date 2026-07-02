@@ -3,9 +3,9 @@ import { PaymentService } from './payment.service';
 import { PaymentController } from './payment.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { OrderModule } from '../order/order.module';
-
+import { CacheModule } from '../cache/cache.module';
 @Module({
-  imports: [PrismaModule, OrderModule],
+  imports: [PrismaModule, OrderModule, CacheModule],
   providers: [PaymentService],
   controllers: [PaymentController],
 })

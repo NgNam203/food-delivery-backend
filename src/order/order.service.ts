@@ -11,10 +11,14 @@ import { OrderStatus, Prisma, UserRole } from '@prisma/client';
 import { OrderQueryDto } from './dto/order-query.dto';
 import { buildPagination } from '../common/utils/pagination.util';
 import { Pricing } from '../pricing/types/pricing.type';
+import { DashboardCacheService } from '../cache/dashboard-cache/dashboard-cache.service';
 
 @Injectable()
 export class OrderService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly dashboardCacheService: DashboardCacheService,
+  ) {}
   private async buildOrderItems(dto: CreateOrderDto): Promise<OrderItemData[]> {
     const result: OrderItemData[] = [];
 
@@ -253,7 +257,7 @@ export class OrderService {
       );
     }
 
-    return this.prisma.order.update({
+    const updatedOrder = await this.prisma.order.update({
       where: {
         id: orderId,
       },
@@ -261,6 +265,10 @@ export class OrderService {
         status: nextStatus,
       },
     });
+
+    await this.dashboardCacheService.invalidate(ownerId);
+
+    return updatedOrder;
   }
 
   async findDetail(orderId: string, userId: string, role: UserRole) {

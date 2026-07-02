@@ -12,12 +12,15 @@ import {
   ConfirmPaymentDto,
   MockPaymentResult,
 } from './dto/confirm-payment.dto';
+import { DashboardCacheService } from '../cache/dashboard-cache/dashboard-cache.service';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class PaymentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly orderService: OrderService,
+    private readonly dashboardCacheService: DashboardCacheService,
   ) {}
 
   async create(orderId: string, customerId: string, dto: CreatePaymentDto) {
@@ -79,16 +82,22 @@ export class PaymentService {
 
     const isSuccess = dto.simulate === MockPaymentResult.SUCCESS;
 
-    return this.prisma.payment.update({
+    const updatedPayment = await this.prisma.payment.update({
       where: {
         id: payment.id,
       },
       data: {
         status: isSuccess ? PaymentStatus.PAID : PaymentStatus.FAILED,
-        transactionId: `MOCK_${crypto.randomUUID()}`,
+        transactionId: `MOCK_${randomUUID()}`,
         paidAt: isSuccess ? new Date() : null,
       },
     });
+
+    await this.dashboardCacheService.invalidateByRestaurantId(
+      payment.order.restaurantId,
+    );
+
+    return updatedPayment;
   }
 
   async findMyPayments(customerId: string) {

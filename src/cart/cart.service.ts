@@ -11,6 +11,7 @@ import { OrderService } from '../order/order.service';
 import { OrderItemData } from '../order/types/order-item-data.type';
 import { PricingService } from '../pricing/pricing.service';
 import { CheckoutCartDto } from './dto/checkout-cart.dto';
+import { DashboardCacheService } from '../cache/dashboard-cache/dashboard-cache.service';
 
 @Injectable()
 export class CartService {
@@ -18,6 +19,7 @@ export class CartService {
     private prisma: PrismaService,
     private readonly orderService: OrderService,
     private readonly pricingService: PricingService,
+    private readonly dashboardCacheService: DashboardCacheService,
   ) {}
 
   private async findOrCreateCart(customerId: string) {
@@ -240,7 +242,7 @@ export class CartService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const order = await this.prisma.$transaction(async (tx) => {
       const order = await this.orderService.createOrderWithTransaction(
         tx,
         customerId,
@@ -269,5 +271,11 @@ export class CartService {
 
       return order;
     });
+
+    await this.dashboardCacheService.invalidateByRestaurantId(
+      order.restaurantId,
+    );
+
+    return order;
   }
 }
