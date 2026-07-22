@@ -22,6 +22,6 @@ import { PaymentProcessor } from './payment.processor';
     }),
   ],
   exports: [BullModule, PaymentQueueService],
-  providers: [PaymentQueueService],
+  providers: [PaymentQueueService, PaymentProcessor],
 })
 export class QueueModule {}
