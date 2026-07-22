@@ -1,12 +1,15 @@
 import { BullModule } from '@nestjs/bullmq';
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { QueueName } from './queue.constants';
 import { PaymentQueueService } from './payment-queue/payment-queue.service';
 import { PaymentProcessor } from './payment.processor';
+import { PaymentModule } from '../payment/payment.module';
 
 @Module({
   imports: [
+    forwardRef(() => PaymentModule),
+
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
