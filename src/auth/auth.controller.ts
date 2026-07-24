@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { RegisterDto } from './dto/register.dto';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -21,7 +21,7 @@ import {
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private readonly authService: AuthService) {}
 
   @ApiOperation({
     summary: 'Register a new customer account',
@@ -71,11 +71,8 @@ export class AuthController {
   })
   @UseGuards(JwtAuthGuard)
   @Get('profile')
-  profile(
-    @Req()
-    req: Request & { user: JwtPayload },
-  ): JwtPayload {
-    return req.user;
+  profile(@CurrentUser() user: JwtPayload): JwtPayload {
+    return user;
   }
 
   @ApiOperation({
@@ -88,7 +85,6 @@ export class AuthController {
   @ApiUnauthorizedResponse({
     description: 'Refresh token is invalid or expired.',
   })
-  @Post('refresh')
   @Post('refresh')
   refresh(@Body() dto: RefreshTokenDto) {
     return this.authService.refresh(dto.refreshToken);
