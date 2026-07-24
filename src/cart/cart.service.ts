@@ -227,11 +227,6 @@ export class CartService {
       restaurantId: item.menuItem.restaurantId,
     }));
 
-    const pricing = await this.pricingService.calculatePricing(
-      orderItems,
-      dto.couponCode,
-    );
-
     const restaurantIds = new Set(
       cart.items.map((item) => item.menuItem.restaurantId),
     );
@@ -241,6 +236,14 @@ export class CartService {
         'All cart items must belong to the same restaurant',
       );
     }
+
+    const restaurantId = cart.items[0].menuItem.restaurantId;
+
+    const pricing = await this.pricingService.calculatePricing(
+      orderItems,
+      restaurantId,
+      dto.couponCode,
+    );
 
     const order = await this.prisma.$transaction(async (tx) => {
       const order = await this.orderService.createOrderWithTransaction(

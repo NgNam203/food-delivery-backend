@@ -21,14 +21,34 @@ export class PricingService {
     );
   }
 
-  private async validateCoupon(couponCode: string): Promise<ValidatedCoupon> {
+  private async validateCoupon(
+    couponCode: string,
+    restaurantId: string,
+  ): Promise<ValidatedCoupon> {
+    const restaurant = await this.prisma.restaurant.findFirst({
+      where: {
+        id: restaurantId,
+        deletedAt: null,
+      },
+      select: {
+        ownerId: true,
+      },
+    });
+
+    if (!restaurant) {
+      throw new BadRequestException('Restaurant not found');
+    }
+
     const coupon = await this.prisma.coupon.findUnique({
       where: {
-        code: couponCode.toUpperCase(),
+        code: couponCode.trim().toUpperCase(),
       },
     });
     if (!coupon) {
       throw new BadRequestException('Invalid coupon');
+    }
+    if (coupon.ownerId !== restaurant.ownerId) {
+      throw new BadRequestException('Coupon is not valid for this restaurant');
     }
     if (!coupon.isActive) {
       throw new BadRequestException('Coupon is inactive');
@@ -79,6 +99,7 @@ export class PricingService {
       quantity: number;
       priceSnapshot: number;
     }[],
+    restaurantId: string,
     couponCode?: string,
   ): Promise<Pricing> {
     const subtotal = this.calculateSubtotal(items);
@@ -91,7 +112,7 @@ export class PricingService {
       };
     }
 
-    const coupon = await this.validateCoupon(couponCode);
+    const coupon = await this.validateCoupon(couponCode, restaurantId);
 
     const discountAmount = this.calculateDiscount(subtotal, coupon);
 
