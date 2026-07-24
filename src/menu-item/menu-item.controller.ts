@@ -33,7 +33,7 @@ import {
 @ApiBearerAuth()
 @Controller()
 export class MenuItemController {
-  constructor(private menuItemService: MenuItemService) {}
+  constructor(private readonly menuItemService: MenuItemService) {}
 
   @ApiOperation({
     summary: 'Create a menu item',

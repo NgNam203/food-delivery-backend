@@ -16,7 +16,7 @@ import { DashboardCacheService } from '../cache/dashboard-cache/dashboard-cache.
 @Injectable()
 export class CartService {
   constructor(
-    private prisma: PrismaService,
+    private readonly prisma: PrismaService,
     private readonly orderService: OrderService,
     private readonly pricingService: PricingService,
     private readonly dashboardCacheService: DashboardCacheService,

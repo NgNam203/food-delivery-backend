@@ -9,7 +9,7 @@ import { UpdateRestaurantDto } from './dto/update-restaurant.dto';
 
 @Injectable()
 export class RestaurantService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async create(ownerId: string, dto: CreateRestaurantDto) {
     return this.prisma.restaurant.create({

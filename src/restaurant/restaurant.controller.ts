@@ -33,7 +33,7 @@ import {
 @ApiBearerAuth()
 @Controller('restaurants')
 export class RestaurantController {
-  constructor(private restaurantService: RestaurantService) {}
+  constructor(private readonly restaurantService: RestaurantService) {}
 
   @ApiOperation({
     summary: 'Create a restaurant',

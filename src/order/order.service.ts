@@ -16,7 +16,7 @@ import { DashboardCacheService } from '../cache/dashboard-cache/dashboard-cache.
 @Injectable()
 export class OrderService {
   constructor(
-    private prisma: PrismaService,
+    private readonly prisma: PrismaService,
     private readonly dashboardCacheService: DashboardCacheService,
   ) {}
   private async buildOrderItems(dto: CreateOrderDto): Promise<OrderItemData[]> {

@@ -47,17 +47,17 @@ enum PaymentStatus {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  role      UserRole @default(CUSTOMER)
+  id       String   @id @default(uuid())
+  email    String   @unique
+  password String
+  role     UserRole @default(CUSTOMER)
 
   refreshTokenHash String?
-  
+
   restaurants Restaurant[]
-  orders Order[]
-  cart Cart?
-  coupons Coupon[]
+  orders      Order[]
+  cart        Cart?
+  coupons     Coupon[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -74,7 +74,7 @@ model Restaurant {
 
   owner     User       @relation(fields: [ownerId], references: [id])
   menuItems MenuItem[]
-  orders Order[]
+  orders    Order[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -93,9 +93,9 @@ model MenuItem {
   imageUrl     String?
   isAvailable  Boolean @default(true)
 
-  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+  restaurant Restaurant  @relation(fields: [restaurantId], references: [id])
   orderItems OrderItem[]
-  cartItems CartItem[]
+  cartItems  CartItem[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -107,21 +107,22 @@ model MenuItem {
 model Order {
   id String @id @default(uuid())
 
-  customerId String
+  customerId   String
   restaurantId String
 
-  subtotal        Decimal @db.Decimal(10,2)
-  discountAmount  Decimal @default(0) @db.Decimal(10,2)
-  totalAmount     Decimal @db.Decimal(10,2)
+  subtotal       Decimal @db.Decimal(10, 2)
+  discountAmount Decimal @default(0) @db.Decimal(10, 2)
+  totalAmount    Decimal @db.Decimal(10, 2)
 
-  couponId String?
+  couponId   String?
   couponCode String?
 
-  status OrderStatus @default(PENDING)
+  status  OrderStatus @default(PENDING)
   payment Payment?
 
-  customer User @relation(fields: [customerId], references: [id])
+  customer   User       @relation(fields: [customerId], references: [id])
   restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+  coupon     Coupon?    @relation(fields: [couponId], references: [id], onDelete: SetNull)
 
   items OrderItem[]
 
@@ -130,19 +131,20 @@ model Order {
 
   @@index([customerId])
   @@index([restaurantId])
+  @@index([couponId])
 }
 
 model OrderItem {
   id String @id @default(uuid())
 
-  orderId String
+  orderId    String
   menuItemId String
 
   quantity Int
 
   menuItemNameSnapshot String
 
-  priceSnapshot Decimal @db.Decimal(10,2)
+  priceSnapshot Decimal @db.Decimal(10, 2)
 
   order Order @relation(fields: [orderId], references: [id])
 
@@ -161,7 +163,7 @@ model Payment {
 
   status PaymentStatus @default(PENDING)
 
-  amount Decimal @db.Decimal(10,2)
+  amount Decimal @db.Decimal(10, 2)
 
   transactionId String?
 
@@ -209,31 +211,27 @@ model Coupon {
 
   ownerId String
 
-  code String @unique
-
+  code        String  @unique
   description String?
 
-  discountType DiscountType
+  discountType  DiscountType
+  discountValue Decimal      @db.Decimal(10, 2)
 
-  discountValue Decimal @db.Decimal(10,2)
-
-  minimumOrder Decimal @db.Decimal(10,2)
-
-  maximumDiscount Decimal? @db.Decimal(10,2)
+  minimumOrder    Decimal  @db.Decimal(10, 2)
+  maximumDiscount Decimal? @db.Decimal(10, 2)
 
   usageLimit Int
-
-  usedCount Int @default(0)
+  usedCount  Int @default(0)
 
   isActive Boolean @default(true)
 
   expiredAt DateTime
 
   createdAt DateTime @default(now())
-
   updatedAt DateTime @updatedAt
 
-  owner User @relation(fields:[ownerId], references:[id])
+  owner  User    @relation(fields: [ownerId], references: [id])
+  orders Order[]
 
   @@index([ownerId])
 }
