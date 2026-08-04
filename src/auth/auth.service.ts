@@ -10,6 +10,8 @@ import { RefreshTokenPayload } from './dto/refresh-token-payload.type';
 import { type StringValue } from 'ms';
 import { createHash, randomUUID } from 'crypto';
 
+jest.mock('bcrypt');
+
 @Injectable()
 export class AuthService {
   constructor(
