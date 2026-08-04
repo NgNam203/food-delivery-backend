@@ -388,8 +388,6 @@ http://localhost:3000/api
 
 ---
 
----
-
 # 👤 Demo Accounts
 
 The database seed provides three demo accounts for testing different roles.
