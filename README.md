@@ -11,6 +11,14 @@ A production-inspired RESTful backend for a food delivery platform, built with N
 ![Swagger](https://img.shields.io/badge/Swagger-API%20Docs-85EA2D)
 ![Docker](https://img.shields.io/badge/Docker-Container-2496ED)
 
+## 🌐 Live API
+
+Swagger API documentation is available at:
+
+https://food-delivery-backend-01iz.onrender.com/api
+
+> The service is hosted on Render's free tier, so the first request may take some time while the instance wakes up.
+
 ---
 
 ## 📖 Project Overview
@@ -251,7 +259,7 @@ Before running the project, make sure you have installed:
 ## Clone Repository
 
 ```bash
-git clone https://github.com/<your-github-username>/food-delivery-backend.git
+git clone https://github.com/NgNam203/food-delivery-backend.git
 
 cd food-delivery-backend
 ```
@@ -402,13 +410,10 @@ The database seed provides three demo accounts for testing different roles.
 
 # 📖 API Documentation
 
-Interactive API documentation is available via Swagger UI.
+Interactive Swagger documentation is available at:
 
-After starting the application, open:
-
-```text
-http://localhost:3000/api
-```
+- Production: https://food-delivery-backend-01iz.onrender.com/api
+- Local: http://localhost:3000/api
 
 Swagger includes:
 
