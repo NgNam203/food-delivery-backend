@@ -121,6 +121,7 @@ This project demonstrates several backend engineering concepts commonly used in 
 - Swagger API Documentation
 - Dockerized Local Development
 - Database Seed Scripts
+- Unit Testing with Jest for Core Business Services
 
 ---
 
@@ -136,6 +137,7 @@ This project demonstrates several backend engineering concepts commonly used in 
 | Validation | class-validator + class-transformer |
 | Cache | Redis |
 | Queue | BullMQ |
+| Testing | Jest |
 | API Documentation | Swagger (OpenAPI) |
 | Containerization | Docker |
 | Password Hashing | bcrypt |
@@ -147,23 +149,21 @@ This project demonstrates several backend engineering concepts commonly used in 
 The project follows a layered architecture where each layer has a clear responsibility.
 
 ```text
-                    Client
-                       │
-                       ▼
-               REST API (Controller)
-                       │
-                       ▼
-                Business Services
-        ┌──────────────┼──────────────┐
-        ▼              ▼              ▼
-   Pricing Service   Redis Cache    BullMQ Queue
-        │              │              │
-        └──────────────┼──────────────┘
-                       ▼
-                Prisma ORM
-                       │
-                       ▼
-                 PostgreSQL
+                         Client
+                           │
+                           ▼
+                  REST API Controllers
+                           │
+                           ▼
+                    Service Layer
+                           │
+              ┌────────────┼────────────┐
+              │            │            │
+              ▼            ▼            ▼
+          Prisma ORM   Redis Cache   BullMQ Queue
+              │
+              ▼
+          PostgreSQL
 ```
 
 ### Architecture Principles
@@ -221,22 +221,24 @@ The system consists of the following main entities:
 ```mermaid
 erDiagram
 
-USER ||--o{ RESTAURANT : owns
-USER ||--o{ ORDER : places
-USER ||--o{ COUPON : creates
-USER ||--|| CART : has
+User ||--o{ Restaurant : owns
+User ||--o{ Order : places
+User ||--o{ Coupon : creates
+User ||--|| Cart : has
 
-RESTAURANT ||--o{ MENU_ITEM : contains
-RESTAURANT ||--o{ ORDER : receives
+Restaurant ||--o{ MenuItem : contains
+Restaurant ||--o{ Order : receives
 
-CART ||--o{ CART_ITEM : contains
-MENU_ITEM ||--o{ CART_ITEM : referenced_by
+Cart ||--o{ CartItem : contains
+MenuItem ||--o{ CartItem : referenced_by
 
-ORDER ||--|{ ORDER_ITEM : contains
-MENU_ITEM ||--o{ ORDER_ITEM : snapshot_of
+Order ||--|{ OrderItem : contains
+MenuItem ||--o{ OrderItem : referenced_by
 
-ORDER ||--|| PAYMENT : has
+Order ||--|| Payment : has
 ```
+
+OrderItem stores snapshots of the menu item name and price at the time an order is created, preserving historical order data even if the menu item is later updated.
 
 The database design focuses on maintaining data consistency through foreign key relationships, transactional order creation, and snapshot data for historical accuracy.
 
@@ -423,6 +425,9 @@ Swagger includes:
 - Example request bodies
 - Endpoint descriptions
 
+### Swagger Preview
+
+![Swagger API Documentation](docs/images/swagger-api.png)
 ---
 
 # 🔄 Business Workflow
@@ -536,6 +541,7 @@ Implemented features:
 - ✅ Dashboard Statistics
 - ✅ Redis Cache
 - ✅ BullMQ Queue
+- ✅ Unit Tests for Core Business Services
 - ✅ Swagger Documentation
 - ✅ Docker Environment
 - ✅ Database Seed
