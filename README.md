@@ -276,35 +276,6 @@ npm install
 
 ---
 
-# 🐳 Docker
-
-The project provides a Docker Compose configuration for local development.
-
-Start PostgreSQL and Redis:
-
-```bash
-docker compose up -d
-```
-
-Check running containers:
-
-```bash
-docker ps
-```
-
-Expected services:
-
-- PostgreSQL
-- Redis
-
-Stop containers:
-
-```bash
-docker compose down
-```
-
----
-
 # ⚙️ Environment Variables
 
 Copy the example environment file:
@@ -335,31 +306,113 @@ REDIS_PORT=6379
 
 ---
 
+# 🐳 Docker
+
+The project provides a Docker Compose configuration for running the complete backend stack locally.
+
+The Docker environment includes:
+
+- NestJS application
+- PostgreSQL database
+- Redis cache
+- Prisma migration service
+
+Make sure the environment variables are configured before starting the containers.
+
+Build and start all services:
+
+```bash
+docker compose up --build
+```
+
+Docker Compose will automatically:
+
+1. Start PostgreSQL and Redis
+2. Wait for both services to become healthy
+3. Run Prisma database migrations
+4. Start the NestJS application after the migrations complete successfully
+
+Check running services:
+
+```bash
+docker compose ps
+```
+
+Expected services:
+
+- `app`
+- `postgres`
+- `redis`
+
+The `migrate` service should exit with code `0` after successfully applying database migrations.
+
+To populate the database with demo data:
+
+```bash
+docker compose exec app npx prisma db seed
+```
+
+The application will then be available at:
+
+```text
+http://localhost:3000
+```
+
+Swagger API documentation:
+
+```text
+http://localhost:3000/api
+```
+
+Stop the Docker environment:
+
+```bash
+docker compose down
+```
+
+> Docker volumes are preserved when using `docker compose down`, so PostgreSQL and Redis data remain available when the containers are started again.
+
+---
+
 # 🗃️ Database Setup
 
-Generate Prisma Client:
+When running the project with Docker Compose, database migrations are applied automatically by the `migrate` service before the NestJS application starts.
+
+No manual migration command is required for the Docker setup.
+
+For local development without Docker, generate the Prisma Client:
 
 ```bash
 npx prisma generate
 ```
 
-Run database migrations:
+Apply existing database migrations:
 
 ```bash
 npx prisma migrate deploy
 ```
 
-> During development, you can also use:
+When developing the database schema and creating new migrations, use:
 
 ```bash
 npx prisma migrate dev
 ```
 
+> Make sure PostgreSQL is running and `DATABASE_URL` in `.env` points to the correct local database before running Prisma commands.
+
 ---
 
 # 🌱 Seed Database
 
-Populate the database with demo data:
+The project includes a seed script that populates the database with demo data for development and testing.
+
+When running the project with Docker Compose:
+
+```bash
+docker compose exec app npx prisma db seed
+```
+
+For local development without Docker:
 
 ```bash
 npx prisma db seed
@@ -372,25 +425,28 @@ The seed script creates:
 - Menu Items
 - Coupons
 
+After seeding, the demo accounts listed below can be used to test authentication and application features.
+
 ---
 
 # ▶️ Run Application
 
-Development mode:
+When using Docker Compose, the NestJS application is started automatically after PostgreSQL, Redis, and database migrations are ready.
+
+For local development without Docker, start the application in development mode:
 
 ```bash
 npm run start:dev
 ```
 
-Production build:
+For a local production build:
 
 ```bash
 npm run build
-
 npm run start:prod
 ```
 
-The application will start at:
+The application will be available at:
 
 ```text
 http://localhost:3000
