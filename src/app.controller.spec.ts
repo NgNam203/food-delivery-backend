@@ -15,8 +15,11 @@ describe('AppController', () => {
   });
 
   describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe('Hello World!');
+    it('should return application metadata', () => {
+      expect(appController.getAppInfo()).toEqual({
+        service: 'food-delivery-backend',
+        docs: '/api',
+      });
     });
   });
 });
