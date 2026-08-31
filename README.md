@@ -474,6 +474,17 @@ The database seed provides three demo accounts for testing different roles.
 
 # 📖 API Documentation
 
+`GET /` returns HTTP `200` with application metadata:
+
+```json
+{
+  "service": "food-delivery-backend",
+  "docs": "/api"
+}
+```
+
+This endpoint provides application information only; it does not check PostgreSQL or Redis health/readiness.
+
 Interactive Swagger documentation is available at:
 
 - Production: https://food-delivery-backend-01iz.onrender.com/api
