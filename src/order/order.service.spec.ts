@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { OrderStatus, Prisma } from '@prisma/client';
+import { OrderStatus, PaymentStatus, Prisma } from '@prisma/client';
 import { OrderService } from './order.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { DashboardCacheService } from '../cache/dashboard-cache/dashboard-cache.service';
@@ -32,12 +32,16 @@ describe('OrderService', () => {
   const txMock = {
     order: {
       create: jest.fn(),
+      findFirst: jest.fn(),
+      updateMany: jest.fn(),
+      findUniqueOrThrow: jest.fn(),
     },
     orderItem: {
       createMany: jest.fn(),
     },
     menuItem: {
       updateMany: jest.fn(),
+      update: jest.fn(),
     },
   };
 
@@ -405,7 +409,175 @@ describe('OrderService', () => {
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
   });
 
-  it('should update order status successfully', async () => {
+  describe('owner cancellation', () => {
+    beforeEach(() => {
+      txMock.order.findFirst.mockResolvedValue({
+        id: 'order-id',
+        status: OrderStatus.PENDING,
+        restaurant: { ownerId: 'owner-id' },
+        items: validOrderItems,
+        payment: null,
+      });
+      txMock.order.updateMany.mockResolvedValue({ count: 1 });
+      prismaMock.$transaction.mockImplementation(async (callback) => {
+        const result = await callback(txMock);
+        expect(dashboardCacheServiceMock.invalidate).not.toHaveBeenCalled();
+        return result;
+      });
+    });
+
+    it('should restore all order items and invalidate cache after commit', async () => {
+      const cancelledOrder = { id: 'order-id', status: OrderStatus.CANCELLED };
+      txMock.order.findUniqueOrThrow.mockResolvedValue(cancelledOrder);
+
+      const result = await service.updateStatus(
+        'order-id',
+        'owner-id',
+        OrderStatus.CANCELLED,
+      );
+
+      expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+      expect(txMock.order.findFirst).toHaveBeenCalledWith({
+        where: { id: 'order-id' },
+        include: { restaurant: true, items: true, payment: true },
+      });
+      expect(txMock.order.updateMany).toHaveBeenCalledWith({
+        where: { id: 'order-id', status: OrderStatus.PENDING },
+        data: { status: OrderStatus.CANCELLED },
+      });
+      expect(txMock.menuItem.update).toHaveBeenCalledTimes(2);
+      expect(txMock.menuItem.update).toHaveBeenNthCalledWith(1, {
+        where: { id: 'menu-item-1' },
+        data: { stock: { increment: 2 } },
+      });
+      expect(txMock.menuItem.update).toHaveBeenNthCalledWith(2, {
+        where: { id: 'menu-item-2' },
+        data: { stock: { increment: 1 } },
+      });
+      expect(result).toEqual(cancelledOrder);
+      expect(dashboardCacheServiceMock.invalidate).toHaveBeenCalledTimes(1);
+      expect(dashboardCacheServiceMock.invalidate).toHaveBeenCalledWith(
+        'owner-id',
+      );
+    });
+
+    it('should reject cancellation of a paid order', async () => {
+      txMock.order.findFirst.mockResolvedValue({
+        id: 'order-id',
+        status: OrderStatus.PENDING,
+        restaurant: { ownerId: 'owner-id' },
+        items: validOrderItems,
+        payment: { status: PaymentStatus.PAID },
+      });
+      await expect(
+        service.updateStatus('order-id', 'owner-id', OrderStatus.CANCELLED),
+      ).rejects.toThrow('Paid order cannot be cancelled');
+      expect(txMock.order.updateMany).not.toHaveBeenCalled();
+      expect(txMock.menuItem.update).not.toHaveBeenCalled();
+      expect(dashboardCacheServiceMock.invalidate).not.toHaveBeenCalled();
+    });
+
+    it('should retry P2034 with fresh reads and restore stock once', async () => {
+      const conflict = new Prisma.PrismaClientKnownRequestError('Conflict', {
+        code: 'P2034',
+        clientVersion: '6.19.3',
+      });
+      txMock.order.updateMany.mockRejectedValueOnce(conflict);
+      txMock.order.findUniqueOrThrow.mockResolvedValue({
+        id: 'order-id',
+        status: OrderStatus.CANCELLED,
+      });
+      await service.updateStatus('order-id', 'owner-id', OrderStatus.CANCELLED);
+      expect(prismaMock.$transaction).toHaveBeenCalledTimes(2);
+      expect(prismaMock.$transaction).toHaveBeenNthCalledWith(
+        2,
+        expect.any(Function),
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        },
+      );
+      expect(txMock.order.findFirst).toHaveBeenCalledTimes(2);
+      expect(txMock.menuItem.update).toHaveBeenCalledTimes(2);
+      expect(dashboardCacheServiceMock.invalidate).toHaveBeenCalledTimes(1);
+    });
+
+    it('should reject fresh paid state after P2034', async () => {
+      txMock.order.updateMany.mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('Conflict', {
+          code: 'P2034',
+          clientVersion: '6.19.3',
+        }),
+      );
+      txMock.order.findFirst
+        .mockResolvedValueOnce({
+          id: 'order-id',
+          status: OrderStatus.PENDING,
+          restaurant: { ownerId: 'owner-id' },
+          items: validOrderItems,
+          payment: null,
+        })
+        .mockResolvedValueOnce({
+          id: 'order-id',
+          status: OrderStatus.PENDING,
+          restaurant: { ownerId: 'owner-id' },
+          items: validOrderItems,
+          payment: { status: PaymentStatus.PAID },
+        });
+      await expect(
+        service.updateStatus('order-id', 'owner-id', OrderStatus.CANCELLED),
+      ).rejects.toThrow('Paid order cannot be cancelled');
+      expect(txMock.order.findFirst).toHaveBeenCalledTimes(2);
+      expect(txMock.menuItem.update).not.toHaveBeenCalled();
+      expect(dashboardCacheServiceMock.invalidate).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['P2034', 3],
+      ['P2002', 1],
+    ])('should propagate %s after %i attempts', async (code, attempts) => {
+      const error = new Prisma.PrismaClientKnownRequestError('Database error', {
+        code,
+        clientVersion: '6.19.3',
+      });
+      txMock.order.updateMany.mockRejectedValue(error);
+      await expect(
+        service.updateStatus('order-id', 'owner-id', OrderStatus.CANCELLED),
+      ).rejects.toBe(error);
+      expect(prismaMock.$transaction).toHaveBeenCalledTimes(attempts);
+      expect(txMock.order.findFirst).toHaveBeenCalledTimes(attempts);
+      expect(txMock.menuItem.update).not.toHaveBeenCalled();
+      expect(dashboardCacheServiceMock.invalidate).not.toHaveBeenCalled();
+    });
+
+    it('should not restore stock when conditional cancellation loses a race', async () => {
+      txMock.order.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.updateStatus('order-id', 'owner-id', OrderStatus.CANCELLED),
+      ).rejects.toThrow('Only pending order can be cancelled');
+
+      expect(txMock.menuItem.update).not.toHaveBeenCalled();
+      expect(txMock.order.findUniqueOrThrow).not.toHaveBeenCalled();
+      expect(dashboardCacheServiceMock.invalidate).not.toHaveBeenCalled();
+    });
+
+    it('should propagate stock errors without invalidating cache', async () => {
+      const error = new Error('Stock update failed');
+      txMock.menuItem.update
+        .mockResolvedValueOnce({})
+        .mockRejectedValueOnce(error);
+
+      await expect(
+        service.updateStatus('order-id', 'owner-id', OrderStatus.CANCELLED),
+      ).rejects.toBe(error);
+
+      expect(txMock.menuItem.update).toHaveBeenCalledTimes(2);
+      expect(txMock.order.findUniqueOrThrow).not.toHaveBeenCalled();
+      expect(dashboardCacheServiceMock.invalidate).not.toHaveBeenCalled();
+    });
+  });
+
+  it('should update non-cancelled status without restoring stock', async () => {
     const orderId = 'order-id';
     const ownerId = 'owner-id';
     const nextStatus = OrderStatus.CONFIRMED;
@@ -446,6 +618,9 @@ describe('OrderService', () => {
         status: OrderStatus.CONFIRMED,
       },
     });
+
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    expect(txMock.menuItem.update).not.toHaveBeenCalled();
 
     expect(dashboardCacheServiceMock.invalidate).toHaveBeenCalledTimes(1);
 
