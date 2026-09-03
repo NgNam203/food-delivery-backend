@@ -7,7 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderItemData } from './types/order-item-data.type';
-import { OrderStatus, Prisma, UserRole } from '@prisma/client';
+import { OrderStatus, PaymentStatus, Prisma, UserRole } from '@prisma/client';
 import { OrderQueryDto } from './dto/order-query.dto';
 import { buildPagination } from '../common/utils/pagination.util';
 import { Pricing } from '../pricing/types/pricing.type';
@@ -227,11 +227,82 @@ export class OrderService {
     CANCELLED: [],
   };
 
+  private async runSerializableTransaction<T>(
+    operation: (tx: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.prisma.$transaction(operation, {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        });
+      } catch (error) {
+        if (
+          !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+          error.code !== 'P2034' ||
+          attempt >= 3
+        ) {
+          throw error;
+        }
+      }
+    }
+  }
+
   async updateStatus(
     orderId: string,
     ownerId: string,
     nextStatus: OrderStatus,
   ) {
+    if (nextStatus === OrderStatus.CANCELLED) {
+      const updatedOrder = await this.runSerializableTransaction(async (tx) => {
+        const order = await tx.order.findFirst({
+          where: { id: orderId },
+          include: { restaurant: true, items: true, payment: true },
+        });
+
+        if (!order) {
+          throw new NotFoundException('Order not found');
+        }
+
+        if (order.restaurant.ownerId !== ownerId) {
+          throw new ForbiddenException(
+            'You are not allowed to update this order',
+          );
+        }
+
+        if (!this.allowedStatusTransitions[order.status].includes(nextStatus)) {
+          throw new BadRequestException(
+            `Cannot change order status from ${order.status} to ${nextStatus}`,
+          );
+        }
+
+        if (order.payment?.status === PaymentStatus.PAID) {
+          throw new BadRequestException('Paid order cannot be cancelled');
+        }
+
+        const cancelledOrder = await tx.order.updateMany({
+          where: { id: orderId, status: OrderStatus.PENDING },
+          data: { status: OrderStatus.CANCELLED },
+        });
+
+        if (cancelledOrder.count !== 1) {
+          throw new BadRequestException('Only pending order can be cancelled');
+        }
+
+        for (const item of order.items) {
+          await tx.menuItem.update({
+            where: { id: item.menuItemId },
+            data: { stock: { increment: item.quantity } },
+          });
+        }
+
+        return tx.order.findUniqueOrThrow({ where: { id: orderId } });
+      });
+
+      await this.dashboardCacheService.invalidate(ownerId);
+
+      return updatedOrder;
+    }
+
     const order = await this.prisma.order.findFirst({
       where: {
         id: orderId,

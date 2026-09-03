@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { OrderStatus, PaymentStatus } from '@prisma/client';
+import { OrderStatus, PaymentStatus, Prisma } from '@prisma/client';
 import { PaymentService } from './payment.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrderService } from '../order/order.service';
@@ -74,6 +74,13 @@ describe('PaymentService', () => {
     service = module.get<PaymentService>(PaymentService);
 
     jest.resetAllMocks();
+    prismaMock.$transaction.mockImplementation(async (callback) => {
+      const result = await callback(txMock);
+      expect(
+        dashboardCacheServiceMock.invalidateByRestaurantId,
+      ).not.toHaveBeenCalled();
+      return result;
+    });
   });
 
   it('should be defined', () => {
@@ -254,7 +261,7 @@ describe('PaymentService', () => {
       simulate: MockPaymentResult.SUCCESS,
     };
 
-    prismaMock.payment.findUnique.mockResolvedValue({
+    txMock.payment.findUnique.mockResolvedValue({
       id: paymentId,
       status: PaymentStatus.PENDING,
       order: {
@@ -271,8 +278,8 @@ describe('PaymentService', () => {
       paidAt: new Date(),
     };
 
-    prismaMock.payment.updateMany.mockResolvedValue({ count: 1 });
-    prismaMock.payment.findUniqueOrThrow.mockResolvedValue(updatedPayment);
+    txMock.payment.updateMany.mockResolvedValue({ count: 1 });
+    txMock.payment.findUniqueOrThrow.mockResolvedValue(updatedPayment);
 
     dashboardCacheServiceMock.invalidateByRestaurantId.mockResolvedValue(
       undefined,
@@ -280,7 +287,7 @@ describe('PaymentService', () => {
 
     const result = await service.confirm(paymentId, customerId, dto);
 
-    expect(prismaMock.payment.findUnique).toHaveBeenCalledWith({
+    expect(txMock.payment.findUnique).toHaveBeenCalledWith({
       where: {
         id: paymentId,
       },
@@ -289,7 +296,7 @@ describe('PaymentService', () => {
       },
     });
 
-    expect(prismaMock.payment.updateMany).toHaveBeenCalledWith({
+    expect(txMock.payment.updateMany).toHaveBeenCalledWith({
       where: {
         id: paymentId,
         status: PaymentStatus.PENDING,
@@ -305,7 +312,10 @@ describe('PaymentService', () => {
       dashboardCacheServiceMock.invalidateByRestaurantId,
     ).toHaveBeenCalledWith('restaurant-id');
 
-    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    expect(prismaMock.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    });
+    expect(prismaMock.payment.findUnique).not.toHaveBeenCalled();
     expect(txMock.order.updateMany).not.toHaveBeenCalled();
     expect(txMock.menuItem.update).not.toHaveBeenCalled();
     expect(result).toEqual(updatedPayment);
@@ -319,13 +329,13 @@ describe('PaymentService', () => {
       simulate: MockPaymentResult.SUCCESS,
     };
 
-    prismaMock.payment.findUnique.mockResolvedValue(null);
+    txMock.payment.findUnique.mockResolvedValue(null);
 
     await expect(service.confirm(paymentId, customerId, dto)).rejects.toThrow(
       'Payment not found',
     );
 
-    expect(prismaMock.payment.updateMany).not.toHaveBeenCalled();
+    expect(txMock.payment.updateMany).not.toHaveBeenCalled();
 
     expect(
       dashboardCacheServiceMock.invalidateByRestaurantId,
@@ -339,7 +349,7 @@ describe('PaymentService', () => {
       simulate: MockPaymentResult.SUCCESS,
     };
 
-    prismaMock.payment.findUnique.mockResolvedValue({
+    txMock.payment.findUnique.mockResolvedValue({
       id: paymentId,
       status: PaymentStatus.PENDING,
       order: {
@@ -352,7 +362,7 @@ describe('PaymentService', () => {
       service.confirm(paymentId, 'customer-id', dto),
     ).rejects.toThrow('Access denied');
 
-    expect(prismaMock.payment.updateMany).not.toHaveBeenCalled();
+    expect(txMock.payment.updateMany).not.toHaveBeenCalled();
 
     expect(
       dashboardCacheServiceMock.invalidateByRestaurantId,
@@ -367,7 +377,7 @@ describe('PaymentService', () => {
       simulate: MockPaymentResult.SUCCESS,
     };
 
-    prismaMock.payment.findUnique.mockResolvedValue({
+    txMock.payment.findUnique.mockResolvedValue({
       id: paymentId,
       status: PaymentStatus.PAID,
       order: {
@@ -380,7 +390,7 @@ describe('PaymentService', () => {
       'Only pending payment can be confirmed',
     );
 
-    expect(prismaMock.payment.updateMany).not.toHaveBeenCalled();
+    expect(txMock.payment.updateMany).not.toHaveBeenCalled();
 
     expect(
       dashboardCacheServiceMock.invalidateByRestaurantId,
@@ -572,16 +582,14 @@ describe('PaymentService', () => {
       service.confirm('payment-id', 'customer-id', {
         simulate: MockPaymentResult.FAILED,
       }),
-    ).rejects.toThrow(
-      'Only pending payment for a pending order can be failed',
-    );
+    ).rejects.toThrow('Only pending payment for a pending order can be failed');
 
     expect(txMock.payment.updateMany).toHaveBeenCalled();
     expect(txMock.menuItem.update).not.toHaveBeenCalled();
   });
 
   it('should reject confirm when conditional payment transition loses a race', async () => {
-    prismaMock.payment.findUnique.mockResolvedValue({
+    txMock.payment.findUnique.mockResolvedValue({
       id: 'payment-id',
       status: PaymentStatus.PENDING,
       order: {
@@ -591,7 +599,7 @@ describe('PaymentService', () => {
         status: OrderStatus.PENDING,
       },
     });
-    prismaMock.payment.updateMany.mockResolvedValue({ count: 0 });
+    txMock.payment.updateMany.mockResolvedValue({ count: 0 });
 
     await expect(
       service.confirm('payment-id', 'customer-id', {
@@ -599,9 +607,124 @@ describe('PaymentService', () => {
       }),
     ).rejects.toThrow('Only pending payment can be confirmed');
 
-    expect(prismaMock.payment.findUniqueOrThrow).not.toHaveBeenCalled();
+    expect(txMock.payment.findUniqueOrThrow).not.toHaveBeenCalled();
     expect(
       dashboardCacheServiceMock.invalidateByRestaurantId,
     ).not.toHaveBeenCalled();
+  });
+
+  describe('SUCCESS transaction conflicts', () => {
+    const confirm = () =>
+      service.confirm('payment-id', 'customer-id', {
+        simulate: MockPaymentResult.SUCCESS,
+      });
+    const pending = {
+      id: 'payment-id',
+      status: PaymentStatus.PENDING,
+      order: {
+        id: 'order-id',
+        customerId: 'customer-id',
+        restaurantId: 'restaurant-id',
+        status: OrderStatus.PENDING,
+      },
+    };
+    beforeEach(() => {
+      txMock.payment.findUnique.mockResolvedValue(pending);
+      txMock.payment.updateMany.mockResolvedValue({ count: 1 });
+      txMock.payment.findUniqueOrThrow.mockResolvedValue({
+        id: 'payment-id',
+        status: PaymentStatus.PAID,
+      });
+    });
+
+    it('should reject SUCCESS for a cancelled order', async () => {
+      txMock.payment.findUnique.mockResolvedValue({
+        ...pending,
+        order: { ...pending.order, status: OrderStatus.CANCELLED },
+      });
+      await expect(confirm()).rejects.toThrow('Cancelled order cannot be paid');
+      expect(txMock.payment.updateMany).not.toHaveBeenCalled();
+      expect(
+        dashboardCacheServiceMock.invalidateByRestaurantId,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('should retry the whole transaction after a P2034 commit conflict', async () => {
+      const conflict = new Prisma.PrismaClientKnownRequestError('Conflict', {
+        code: 'P2034',
+        clientVersion: '6.19.3',
+      });
+      prismaMock.$transaction.mockImplementationOnce(async (callback) => {
+        await callback(txMock);
+        expect(
+          dashboardCacheServiceMock.invalidateByRestaurantId,
+        ).not.toHaveBeenCalled();
+        throw conflict;
+      });
+      await expect(confirm()).resolves.toEqual({
+        id: 'payment-id',
+        status: PaymentStatus.PAID,
+      });
+      expect(prismaMock.$transaction).toHaveBeenCalledTimes(2);
+      expect(prismaMock.$transaction).toHaveBeenNthCalledWith(
+        2,
+        expect.any(Function),
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        },
+      );
+      expect(txMock.payment.findUnique).toHaveBeenCalledTimes(2);
+      expect(
+        dashboardCacheServiceMock.invalidateByRestaurantId,
+      ).toHaveBeenCalledTimes(1);
+    });
+
+    it('should reject a freshly cancelled order after P2034', async () => {
+      txMock.payment.updateMany.mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('Conflict', {
+          code: 'P2034',
+          clientVersion: '6.19.3',
+        }),
+      );
+      txMock.payment.findUnique
+        .mockResolvedValueOnce(pending)
+        .mockResolvedValueOnce({
+          ...pending,
+          order: { ...pending.order, status: OrderStatus.CANCELLED },
+        });
+      await expect(confirm()).rejects.toThrow('Cancelled order cannot be paid');
+      expect(txMock.payment.findUnique).toHaveBeenCalledTimes(2);
+      expect(txMock.payment.updateMany).toHaveBeenCalledTimes(1);
+      expect(
+        dashboardCacheServiceMock.invalidateByRestaurantId,
+      ).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['P2034', 3],
+      ['P2002', 1],
+    ])('should propagate %s after %i attempts', async (code, attempts) => {
+      const error = new Prisma.PrismaClientKnownRequestError('Database error', {
+        code,
+        clientVersion: '6.19.3',
+      });
+      txMock.payment.updateMany.mockRejectedValue(error);
+      await expect(confirm()).rejects.toBe(error);
+      expect(prismaMock.$transaction).toHaveBeenCalledTimes(attempts);
+      expect(txMock.payment.findUnique).toHaveBeenCalledTimes(attempts);
+      expect(
+        dashboardCacheServiceMock.invalidateByRestaurantId,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('should propagate other database errors without retry or cache invalidation', async () => {
+      const error = new Error('Database unavailable');
+      txMock.payment.findUniqueOrThrow.mockRejectedValue(error);
+      await expect(confirm()).rejects.toBe(error);
+      expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+      expect(
+        dashboardCacheServiceMock.invalidateByRestaurantId,
+      ).not.toHaveBeenCalled();
+    });
   });
 });

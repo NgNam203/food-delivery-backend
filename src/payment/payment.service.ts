@@ -7,7 +7,7 @@ import {
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrderService } from '../order/order.service';
-import { OrderStatus, PaymentStatus } from '@prisma/client';
+import { OrderStatus, PaymentStatus, Prisma } from '@prisma/client';
 import {
   ConfirmPaymentDto,
   MockPaymentResult,
@@ -66,7 +66,91 @@ export class PaymentService {
     return payment;
   }
 
+  private async runSerializableTransaction<T>(
+    operation: (tx: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.prisma.$transaction(operation, {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        });
+      } catch (error) {
+        if (
+          !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+          error.code !== 'P2034' ||
+          attempt >= 3
+        ) {
+          throw error;
+        }
+      }
+    }
+  }
+
   async confirm(paymentId: string, customerId: string, dto: ConfirmPaymentDto) {
+    if (dto.simulate !== MockPaymentResult.FAILED) {
+      const result = await this.runSerializableTransaction(async (tx) => {
+        const payment = await tx.payment.findUnique({
+          where: {
+            id: paymentId,
+          },
+          include: {
+            order: true,
+          },
+        });
+
+        if (!payment) {
+          throw new NotFoundException('Payment not found');
+        }
+
+        if (payment.order.customerId !== customerId) {
+          throw new ForbiddenException('Access denied');
+        }
+
+        if (payment.status !== PaymentStatus.PENDING) {
+          throw new BadRequestException(
+            'Only pending payment can be confirmed',
+          );
+        }
+
+        if (payment.order.status === OrderStatus.CANCELLED) {
+          throw new BadRequestException('Cancelled order cannot be paid');
+        }
+
+        const updated = await tx.payment.updateMany({
+          where: {
+            id: payment.id,
+            status: PaymentStatus.PENDING,
+          },
+          data: {
+            status: PaymentStatus.PAID,
+            transactionId: `MOCK_${randomUUID()}`,
+            paidAt: new Date(),
+          },
+        });
+
+        if (updated.count !== 1) {
+          throw new BadRequestException(
+            'Only pending payment can be confirmed',
+          );
+        }
+
+        const updatedPayment = await tx.payment.findUniqueOrThrow({
+          where: {
+            id: payment.id,
+          },
+        });
+
+        return {
+          payment: updatedPayment,
+          restaurantId: payment.order.restaurantId,
+        };
+      });
+      await this.dashboardCacheService.invalidateByRestaurantId(
+        result.restaurantId,
+      );
+      return result.payment;
+    }
+
     const payment = await this.prisma.payment.findUnique({
       where: {
         id: paymentId,
@@ -92,48 +176,18 @@ export class PaymentService {
       throw new BadRequestException('Cancelled order cannot be paid');
     }
 
-    if (dto.simulate === MockPaymentResult.FAILED) {
-      const failedPayment = await this.failPendingPaymentAndCancelOrder(
-        payment.id,
-        `MOCK_${randomUUID()}`,
-      );
-
-      if (!failedPayment) {
-        throw new BadRequestException(
-          'Only pending payment for a pending order can be failed',
-        );
-      }
-
-      return failedPayment;
-    }
-
-    const updated = await this.prisma.payment.updateMany({
-      where: {
-        id: payment.id,
-        status: PaymentStatus.PENDING,
-      },
-      data: {
-        status: PaymentStatus.PAID,
-        transactionId: `MOCK_${randomUUID()}`,
-        paidAt: new Date(),
-      },
-    });
-
-    if (updated.count === 0) {
-      throw new BadRequestException('Only pending payment can be confirmed');
-    }
-
-    const updatedPayment = await this.prisma.payment.findUniqueOrThrow({
-      where: {
-        id: payment.id,
-      },
-    });
-
-    await this.dashboardCacheService.invalidateByRestaurantId(
-      payment.order.restaurantId,
+    const failedPayment = await this.failPendingPaymentAndCancelOrder(
+      payment.id,
+      `MOCK_${randomUUID()}`,
     );
 
-    return updatedPayment;
+    if (!failedPayment) {
+      throw new BadRequestException(
+        'Only pending payment for a pending order can be failed',
+      );
+    }
+
+    return failedPayment;
   }
 
   async findMyPayments(customerId: string) {
