@@ -16,6 +16,8 @@ import { DashboardCacheService } from '../cache/dashboard-cache/dashboard-cache.
 import { randomUUID } from 'crypto';
 import { PaymentQueueService } from '../queue/payment-queue/payment-queue.service';
 
+class TerminalPaymentTransitionConflict extends Error {}
+
 @Injectable()
 export class PaymentService {
   constructor(
@@ -86,16 +88,44 @@ export class PaymentService {
       throw new BadRequestException('Only pending payment can be confirmed');
     }
 
-    const isSuccess = dto.simulate === MockPaymentResult.SUCCESS;
+    if (payment.order.status === OrderStatus.CANCELLED) {
+      throw new BadRequestException('Cancelled order cannot be paid');
+    }
 
-    const updatedPayment = await this.prisma.payment.update({
+    if (dto.simulate === MockPaymentResult.FAILED) {
+      const failedPayment = await this.failPendingPaymentAndCancelOrder(
+        payment.id,
+        `MOCK_${randomUUID()}`,
+      );
+
+      if (!failedPayment) {
+        throw new BadRequestException(
+          'Only pending payment for a pending order can be failed',
+        );
+      }
+
+      return failedPayment;
+    }
+
+    const updated = await this.prisma.payment.updateMany({
       where: {
         id: payment.id,
+        status: PaymentStatus.PENDING,
       },
       data: {
-        status: isSuccess ? PaymentStatus.PAID : PaymentStatus.FAILED,
+        status: PaymentStatus.PAID,
         transactionId: `MOCK_${randomUUID()}`,
-        paidAt: isSuccess ? new Date() : null,
+        paidAt: new Date(),
+      },
+    });
+
+    if (updated.count === 0) {
+      throw new BadRequestException('Only pending payment can be confirmed');
+    }
+
+    const updatedPayment = await this.prisma.payment.findUniqueOrThrow({
+      where: {
+        id: payment.id,
       },
     });
 
@@ -129,50 +159,110 @@ export class PaymentService {
     });
   }
 
-  async handlePaymentTimeout(paymentId: string): Promise<void> {
-    const payment = await this.prisma.payment.findUnique({
-      where: {
-        id: paymentId,
-      },
-      include: {
-        order: true,
-      },
-    });
+  private async failPendingPaymentAndCancelOrder(
+    paymentId: string,
+    transactionId: string,
+  ) {
+    try {
+      const result = await this.prisma.$transaction(async (tx) => {
+        const payment = await tx.payment.findUnique({
+          where: {
+            id: paymentId,
+          },
+          include: {
+            order: {
+              include: {
+                items: true,
+              },
+            },
+          },
+        });
 
-    if (!payment) {
-      return;
-    }
+        if (
+          !payment ||
+          payment.status !== PaymentStatus.PENDING ||
+          payment.order.status !== OrderStatus.PENDING
+        ) {
+          return null;
+        }
 
-    if (payment.status !== PaymentStatus.PENDING) {
-      return;
-    }
-
-    await this.prisma.$transaction(async (tx) => {
-      await tx.payment.update({
-        where: {
-          id: payment.id,
-        },
-        data: {
-          status: PaymentStatus.FAILED,
-          transactionId: `TIMEOUT_${randomUUID()}`,
-          paidAt: null,
-        },
-      });
-
-      if (payment.order.status === OrderStatus.PENDING) {
-        await tx.order.update({
+        const cancelledOrder = await tx.order.updateMany({
           where: {
             id: payment.order.id,
+            status: OrderStatus.PENDING,
           },
           data: {
             status: OrderStatus.CANCELLED,
           },
         });
-      }
-    });
 
-    await this.dashboardCacheService.invalidateByRestaurantId(
-      payment.order.restaurantId,
+        if (cancelledOrder.count === 0) {
+          return null;
+        }
+
+        const failedPayment = await tx.payment.updateMany({
+          where: {
+            id: payment.id,
+            status: PaymentStatus.PENDING,
+          },
+          data: {
+            status: PaymentStatus.FAILED,
+            transactionId,
+            paidAt: null,
+          },
+        });
+
+        if (failedPayment.count === 0) {
+          throw new TerminalPaymentTransitionConflict();
+        }
+
+        for (const item of payment.order.items) {
+          await tx.menuItem.update({
+            where: {
+              id: item.menuItemId,
+            },
+            data: {
+              stock: {
+                increment: item.quantity,
+              },
+            },
+          });
+        }
+
+        const updatedPayment = await tx.payment.findUniqueOrThrow({
+          where: {
+            id: payment.id,
+          },
+        });
+
+        return {
+          payment: updatedPayment,
+          restaurantId: payment.order.restaurantId,
+        };
+      });
+
+      if (!result) {
+        return null;
+      }
+
+      await this.dashboardCacheService.invalidateByRestaurantId(
+        result.restaurantId,
+      );
+
+      return result.payment;
+    } catch (error) {
+      if (error instanceof TerminalPaymentTransitionConflict) {
+        return null;
+      }
+
+      throw error;
+    }
+  }
+
+  async handlePaymentTimeout(paymentId: string): Promise<void> {
+    await this.failPendingPaymentAndCancelOrder(
+      paymentId,
+      `TIMEOUT_${randomUUID()}`,
     );
   }
 }
