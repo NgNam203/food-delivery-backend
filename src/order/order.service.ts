@@ -80,6 +80,17 @@ export class OrderService {
     orderItems: OrderItemData[],
     pricing: Pricing,
   ) {
+    const restaurant = await tx.restaurant.findFirst({
+      where: {
+        id: orderItems[0].restaurantId,
+        deletedAt: null,
+      },
+    });
+
+    if (!restaurant) {
+      throw new NotFoundException('Restaurant not found');
+    }
+
     const order = await tx.order.create({
       data: {
         customerId,
