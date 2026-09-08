@@ -30,6 +30,7 @@ describe('OrderService', () => {
   };
 
   const txMock = {
+    restaurant: { findFirst: jest.fn() },
     order: {
       create: jest.fn(),
       findFirst: jest.fn(),
@@ -88,6 +89,10 @@ describe('OrderService', () => {
     service = module.get<OrderService>(OrderService);
 
     jest.resetAllMocks();
+    txMock.restaurant.findFirst.mockResolvedValue({
+      id: 'restaurant-1',
+      deletedAt: null,
+    });
   });
 
   it('should be defined', () => {
@@ -216,7 +221,7 @@ describe('OrderService', () => {
     expect(txMock.menuItem.updateMany).toHaveBeenCalledTimes(2);
   });
 
-  it('should create order successfully', async () => {
+  it('should create order successfully for an active restaurant', async () => {
     const customerId = 'customer-id';
 
     const dto = {
@@ -244,9 +249,8 @@ describe('OrderService', () => {
       id: 'order-id',
     };
 
-    jest
-      .spyOn(service, 'createOrderWithTransaction')
-      .mockResolvedValue(createdOrder);
+    txMock.order.create.mockResolvedValue(createdOrder);
+    txMock.menuItem.updateMany.mockResolvedValue({ count: 1 });
 
     prismaMock.$transaction.mockImplementation(async (callback) => {
       return callback(txMock);
@@ -256,11 +260,41 @@ describe('OrderService', () => {
 
     expect(prismaMock.menuItem.findFirst).toHaveBeenCalledTimes(1);
 
-    expect(service.createOrderWithTransaction).toHaveBeenCalledTimes(1);
+    expect(txMock.restaurant.findFirst).toHaveBeenCalledWith({
+      where: { id: 'restaurant-1', deletedAt: null },
+    });
 
     expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
 
     expect(result).toEqual(createdOrder);
+  });
+
+  it('should reject direct orders for a soft-deleted restaurant', async () => {
+    prismaMock.menuItem.findFirst.mockResolvedValue({
+      id: 'menu-item-1',
+      name: 'Burger',
+      stock: 10,
+      isAvailable: true,
+      deletedAt: null,
+      price: 10,
+      restaurantId: 'restaurant-1',
+      restaurant: { id: 'restaurant-1', deletedAt: new Date() },
+    });
+    txMock.restaurant.findFirst.mockResolvedValue(null);
+    prismaMock.$transaction.mockImplementation(async (callback) => callback(txMock));
+
+    await expect(
+      service.create('customer-id', {
+        items: [{ menuItemId: 'menu-item-1', quantity: 1 }],
+      }),
+    ).rejects.toThrow('Restaurant not found');
+
+    expect(txMock.restaurant.findFirst).toHaveBeenCalledWith({
+      where: { id: 'restaurant-1', deletedAt: null },
+    });
+    expect(txMock.order.create).not.toHaveBeenCalled();
+    expect(txMock.orderItem.createMany).not.toHaveBeenCalled();
+    expect(txMock.menuItem.updateMany).not.toHaveBeenCalled();
   });
 
   it('should throw when menu item does not exist', async () => {

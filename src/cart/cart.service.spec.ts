@@ -16,6 +16,10 @@ describe('CartService', () => {
   const pricingServiceMock = { calculatePricing: jest.fn() };
   const cacheMock = { invalidateByRestaurantId: jest.fn() };
   const txMock = {
+    restaurant: { findFirst: jest.fn() },
+    order: { create: jest.fn() },
+    orderItem: { createMany: jest.fn() },
+    menuItem: { updateMany: jest.fn() },
     coupon: { update: jest.fn() },
     cartItem: { deleteMany: jest.fn() },
   };
@@ -80,6 +84,50 @@ describe('CartService', () => {
       callback(txMock),
     );
   });
+
+  it.each([true, false])(
+    'checks restaurant status during checkout without coupon (soft-deleted: %s)',
+    async (softDeleted) => {
+      const orderService = new OrderService(
+        prismaMock as unknown as PrismaService,
+        cacheMock as unknown as DashboardCacheService,
+      );
+      orderServiceMock.createOrderWithTransaction.mockImplementation(
+        orderService.createOrderWithTransaction.bind(orderService),
+      );
+      pricingServiceMock.calculatePricing.mockResolvedValue({
+        subtotal: 26,
+        discountAmount: 0,
+        totalAmount: 26,
+      });
+      txMock.restaurant.findFirst.mockResolvedValue(
+        softDeleted ? null : { id: 'restaurant-1', deletedAt: null },
+      );
+      txMock.order.create.mockResolvedValue(createdOrder);
+      txMock.menuItem.updateMany.mockResolvedValue({ count: 1 });
+
+      const checkout = service.checkout('customer-1', {});
+      if (softDeleted) {
+        await expect(checkout).rejects.toThrow('Restaurant not found');
+        expect(txMock.order.create).not.toHaveBeenCalled();
+        expect(txMock.orderItem.createMany).not.toHaveBeenCalled();
+        expect(txMock.menuItem.updateMany).not.toHaveBeenCalled();
+        expect(txMock.cartItem.deleteMany).not.toHaveBeenCalled();
+        expect(cacheMock.invalidateByRestaurantId).not.toHaveBeenCalled();
+      } else {
+        await expect(checkout).resolves.toBe(createdOrder);
+        expect(txMock.menuItem.updateMany).toHaveBeenCalledTimes(2);
+        expect(txMock.cartItem.deleteMany).toHaveBeenCalledTimes(1);
+      }
+      expect(txMock.restaurant.findFirst).toHaveBeenCalledWith({
+        where: { id: 'restaurant-1', deletedAt: null },
+      });
+      expect(pricingServiceMock.calculatePricing).toHaveBeenCalledWith(
+        expect.any(Array), 'restaurant-1', undefined,
+      );
+      expect(txMock.coupon.update).not.toHaveBeenCalled();
+    },
+  );
 
   it('rejects insufficient stock before pricing or starting a transaction', async () => {
     const cart = makeCart();
